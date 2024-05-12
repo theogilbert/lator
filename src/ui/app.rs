@@ -27,7 +27,11 @@ impl LatorApp {
 impl eframe::App for LatorApp {
     fn update(&mut self, ctx: &Context, _frame: &mut eframe::Frame) {
         self.results_panel.show(ctx);
-        self.input_panel.show(ctx);
+        let result = self.input_panel.show(ctx);
+
+        if let Some(_submission) = result {
+            self.results_panel.add_result("result".into());
+        }
     }
 }
 
@@ -41,7 +45,7 @@ struct InputPanel {
 }
 
 impl InputPanel {
-    pub fn show(&mut self, ctx: &Context) {
+    pub fn show(&mut self, ctx: &Context) -> Option<String> {
         let result = CentralPanel::default()
             .frame(Self::build_frame())
             .show(ctx, |ui| {
@@ -61,6 +65,8 @@ impl InputPanel {
         if let Some(submission) = &result.inner {
             self.history.push(submission.clone());
         }
+
+        result.inner
     }
 
     fn build_frame() -> Frame {
@@ -85,7 +91,9 @@ impl InputPanel {
 /// Although this panel appears on the right of the InputPanel, it should be added to the UI first:
 /// With egui, innermost panels should be added first ot the UI.
 #[derive(Default)]
-struct ResultsPanel {}
+struct ResultsPanel {
+    results: Vec<String>,
+}
 
 impl ResultsPanel {
     pub fn show(&mut self, ctx: &Context) {
@@ -97,7 +105,15 @@ impl ResultsPanel {
             .frame(Self::build_frame())
             .exact_width(panel_width)
             .resizable(false)
-            .show(ctx, |_ui| {});
+            .show(ctx, |ui| {
+                self.results.iter().for_each(|result| {
+                    ui.add(Label::new(result));
+                })
+            });
+    }
+
+    pub fn add_result(&mut self, result: String) {
+        self.results.push(result);
     }
 
     fn build_frame() -> Frame {
