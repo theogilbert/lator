@@ -1,5 +1,5 @@
 use eframe::epaint::{Color32, FontFamily, FontId, Margin};
-use egui::{CentralPanel, Context, Frame, SidePanel, TextEdit, TextStyle};
+use egui::{CentralPanel, Context, Frame, Label, SidePanel, TextBuffer, TextEdit, TextStyle};
 
 #[derive(Default)]
 pub struct LatorApp {
@@ -36,18 +36,31 @@ impl eframe::App for LatorApp {
 struct InputPanel {
     /// The current expression being written by the user.
     input: String,
+    /// Previously submitted expressions
+    history: Vec<String>,
 }
 
 impl InputPanel {
     pub fn show(&mut self, ctx: &Context) {
-        CentralPanel::default()
+        let result = CentralPanel::default()
             .frame(Self::build_frame())
             .show(ctx, |ui| {
-                let text_edit = self.build_expr_text_edit(ctx);
+                self.history.iter().for_each(|previous_expr| {
+                    ui.add(Label::new(previous_expr));
+                });
 
+                let text_edit = self.build_expr_text_edit(ctx);
                 let result = ui.add(text_edit);
+
+                let submission = result.lost_focus().then(|| self.input.take());
+
                 result.request_focus();
+                submission
             });
+
+        if let Some(submission) = &result.inner {
+            self.history.push(submission.clone());
+        }
     }
 
     fn build_frame() -> Frame {
