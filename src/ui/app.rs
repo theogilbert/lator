@@ -10,12 +10,14 @@ pub struct LatorApp {
 impl LatorApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         const SEPARATOR_LINE_COLOR: Color32 = Color32::from_rgb(240, 230, 215);
+        const TEXT_SELECTION_COLOR: Color32 = Color32::from_rgb(140, 130, 115);
 
         cc.egui_ctx.style_mut(|style| {
             style
                 .text_styles
                 .insert(TextStyle::Body, FontId::new(15.0, FontFamily::Monospace));
             style.visuals.widgets.noninteractive.bg_stroke.color = SEPARATOR_LINE_COLOR;
+            style.visuals.selection.bg_fill = TEXT_SELECTION_COLOR;
         });
 
         Self::default()
