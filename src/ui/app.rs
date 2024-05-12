@@ -56,7 +56,8 @@ impl InputPanel {
                 let text_edit = self.build_expr_text_edit(ctx);
                 let result = ui.add(text_edit);
 
-                let submission = result.lost_focus().then(|| self.input.take());
+                let expr_submitted = result.lost_focus() && !self.input.is_empty();
+                let submission = expr_submitted.then(|| self.input.take());
 
                 result.request_focus();
                 submission
