@@ -8,16 +8,20 @@ pub struct LatorApp {
 }
 
 impl LatorApp {
-    pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
-        const SEPARATOR_LINE_COLOR: Color32 = Color32::from_rgb(240, 230, 215);
-        const TEXT_SELECTION_COLOR: Color32 = Color32::from_rgb(140, 130, 115);
+    const FRAME_MARGIN: Margin = Margin::same(5.);
+    const MAIN_BG_COLOR: Color32 = Color32::WHITE;
+    const TEXT_SELECTION_COLOR: Color32 = Color32::from_rgb(140, 130, 115);
+    const SEPARATOR_LINE_COLOR: Color32 = Color32::from_rgb(240, 230, 215);
+    const RESULTS_BG_COLOR: Color32 = Color32::from_rgb(250, 245, 225);
+    const RESULTS_PANEL_RATIO: f32 = 1. / 2.5;
 
+    pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         cc.egui_ctx.style_mut(|style| {
             style
                 .text_styles
                 .insert(TextStyle::Body, FontId::new(15.0, FontFamily::Monospace));
-            style.visuals.widgets.noninteractive.bg_stroke.color = SEPARATOR_LINE_COLOR;
-            style.visuals.selection.bg_fill = TEXT_SELECTION_COLOR;
+            style.visuals.widgets.noninteractive.bg_stroke.color = Self::SEPARATOR_LINE_COLOR;
+            style.visuals.selection.bg_fill = Self::TEXT_SELECTION_COLOR;
         });
 
         Self::default()
@@ -39,9 +43,9 @@ impl eframe::App for LatorApp {
 #[derive(Default)]
 struct InputPanel {
     /// The current expression being written by the user.
-    input: String,
+    expression: String,
     /// Previously submitted expressions
-    history: Vec<String>,
+    expr_history: Vec<String>,
 }
 
 impl InputPanel {
@@ -49,36 +53,35 @@ impl InputPanel {
         let result = CentralPanel::default()
             .frame(Self::build_frame())
             .show(ctx, |ui| {
-                self.history.iter().for_each(|previous_expr| {
+                self.expr_history.iter().for_each(|previous_expr| {
                     ui.add(Label::new(previous_expr));
                 });
 
-                let text_edit = self.build_expr_text_edit(ctx);
-                let result = ui.add(text_edit);
+                let expr_edit = self.build_expr_text_edit(ctx);
+                let edit_result = ui.add(expr_edit);
 
-                let expr_submitted = result.lost_focus() && !self.input.is_empty();
-                let submission = expr_submitted.then(|| self.input.take());
+                let expr_submitted = edit_result.lost_focus() && !self.expression.is_empty();
+                let submission = expr_submitted.then(|| self.expression.take());
 
-                result.request_focus();
+                edit_result.request_focus();
                 submission
             });
 
-        if let Some(submission) = &result.inner {
-            self.history.push(submission.clone());
+        if let Some(expr) = &result.inner {
+            self.expr_history.push(expr.clone());
         }
 
         result.inner
     }
 
     fn build_frame() -> Frame {
-        const BG_COLOR: Color32 = Color32::WHITE;
-        const MARGIN: Margin = Margin::same(5.);
-
-        Frame::default().fill(BG_COLOR).inner_margin(MARGIN)
+        Frame::default()
+            .fill(LatorApp::MAIN_BG_COLOR)
+            .inner_margin(LatorApp::FRAME_MARGIN)
     }
 
     fn build_expr_text_edit(&mut self, ctx: &Context) -> TextEdit {
-        TextEdit::singleline(&mut self.input)
+        TextEdit::singleline(&mut self.expression)
             .desired_width(f32::INFINITY)
             .margin(Margin::ZERO)
             .frame(false)
@@ -98,9 +101,8 @@ struct ResultsPanel {
 
 impl ResultsPanel {
     pub fn show(&mut self, ctx: &Context) {
-        const RESULTS_PANEL_RATIO: f32 = 1. / 2.5;
         let ui_width = ctx.available_rect().width();
-        let panel_width = (ui_width * RESULTS_PANEL_RATIO).floor();
+        let panel_width = (ui_width * LatorApp::RESULTS_PANEL_RATIO).floor();
 
         SidePanel::right("results")
             .frame(Self::build_frame())
@@ -118,9 +120,8 @@ impl ResultsPanel {
     }
 
     fn build_frame() -> Frame {
-        const BG_COLOR: Color32 = Color32::from_rgb(250, 245, 225);
-        const MARGIN: Margin = Margin::same(5.);
-
-        Frame::default().fill(BG_COLOR).inner_margin(MARGIN)
+        Frame::default()
+            .fill(LatorApp::RESULTS_BG_COLOR)
+            .inner_margin(LatorApp::FRAME_MARGIN)
     }
 }
