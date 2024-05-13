@@ -1,3 +1,5 @@
+mod token;
+
 /** Evaluates textual expressions */
 pub fn evaluate(expr: &str) -> Result<String, ()> {
     if expr.parse::<f32>().is_err() {
