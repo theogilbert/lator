@@ -1,12 +1,19 @@
+use crate::engine::token::{Token, tokenize};
+
 mod token;
 
 /** Evaluates textual expressions */
 pub fn evaluate(expr: &str) -> Result<String, ()> {
-    if expr.parse::<f32>().is_err() {
-       return Err(())
+    let tokens = tokenize(expr);
+
+    if tokens.len() != 1 {
+        return Err(());
     }
 
-    Ok(expr.into())
+    match tokens.first().unwrap() {
+        Token::Number(num) => Ok(num.to_string()),
+        _ => Err(())
+    }
 }
 
 
