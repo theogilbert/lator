@@ -9,6 +9,12 @@ pub enum Token<'a> {
     /** A simple number, which may or may not contain decimals.\
     The decimal separator is the dot `.` character. */
     Number(&'a str),
+    Operator(OperatorType),
+}
+
+#[derive(Eq, PartialEq, Debug)]
+pub enum OperatorType {
+    Addition,
 }
 
 /** Split the expression in an ordered sequence of tokens.\
@@ -97,6 +103,7 @@ enum TokenCandidate {
     Invalid,
     // `has_decimals` indicates whether this token already contains a decimal separator.
     Number { has_decimals: bool },
+    Operator(OperatorType),
 }
 
 impl TokenCandidate {
@@ -106,6 +113,7 @@ impl TokenCandidate {
                 has_decimals: false,
             },
             '.' => Number { has_decimals: true },
+            '+' => Self::Operator(OperatorType::Addition),
             _ => Invalid,
         }
     }
@@ -126,6 +134,7 @@ impl TokenCandidate {
 
                 character.is_ascii_digit()
             }
+            Self::Operator(_) => false, // Operators should contain a single char
             Invalid => true,
         }
     }
@@ -133,6 +142,7 @@ impl TokenCandidate {
     fn build_token(self, content: &str) -> Token {
         match self {
             Number { has_decimals: _ } => Token::Number(content),
+            Self::Operator(op_type) => Token::Operator(op_type),
             Invalid => Token::Invalid(content),
         }
     }
@@ -141,6 +151,7 @@ impl TokenCandidate {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::engine::token::OperatorType::Addition;
     use rstest::rstest;
 
     #[test]
@@ -174,8 +185,14 @@ mod tests {
         );
     }
 
+    #[test]
+    fn should_evaluate_operator_as_valid_token() {
+        assert_eq!(vec![Token::Operator(Addition)], tokenize("+"));
+    }
+
     #[rstest]
     #[case("123abc", vec![Token::Number("123"), Token::Invalid("abc")])]
+    #[case("123+.456", vec![Token::Number("123"), Token::Operator(Addition), Token::Number(".456")])]
     fn should_evaluate_expression_as_sequence(#[case] expr: &str, #[case] tokens: Vec<Token>) {
         assert_eq!(tokens, tokenize(expr));
     }
