@@ -1,4 +1,4 @@
-use crate::engine::token::{Token, tokenize};
+use crate::engine::token::{tokenize, TokenType};
 
 mod token;
 
@@ -10,8 +10,9 @@ pub fn evaluate(expr: &str) -> Result<String, ()> {
         return Err(());
     }
 
-    match tokens.first().unwrap() {
-        Token::Number(num) => Ok(num.to_string()),
+    let only_token = tokens.first().unwrap();
+    match only_token.token_type() {
+        TokenType::Number => Ok(only_token.content().to_string()),
         _ => Err(())
     }
 }
