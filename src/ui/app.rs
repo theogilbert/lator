@@ -1,3 +1,4 @@
+use crate::engine::evaluate;
 use eframe::epaint::{Color32, FontFamily, FontId, Margin};
 use egui::{CentralPanel, Context, Frame, Label, SidePanel, TextBuffer, TextEdit, TextStyle};
 
@@ -33,8 +34,8 @@ impl eframe::App for LatorApp {
         self.results_panel.show(ctx);
         let result = self.input_panel.show(ctx);
 
-        if let Some(_submission) = result {
-            self.results_panel.add_result("result".into());
+        if let Some(expr_result) = result {
+            self.results_panel.add_result(expr_result);
         }
     }
 }
@@ -49,12 +50,15 @@ struct InputPanel {
 }
 
 impl InputPanel {
+    /**
+    Displays the calculator's input panel, and returns an expression if the user submitted one.
+     */
     pub fn show(&mut self, ctx: &Context) -> Option<String> {
-        let result = CentralPanel::default()
+        let input_result = CentralPanel::default()
             .frame(Self::build_frame())
             .show(ctx, |ui| {
                 self.expr_history.iter().for_each(|previous_expr| {
-                    ui.add(Label::new(previous_expr));
+                    ui.add(Label::new(previous_expr).truncate(true));
                 });
 
                 let expr_edit = self.build_expr_text_edit(ctx);
@@ -67,11 +71,11 @@ impl InputPanel {
                 submission
             });
 
-        if let Some(expr) = &result.inner {
-            self.expr_history.push(expr.clone());
-        }
-
-        result.inner
+        input_result.inner.and_then(|expr| {
+            let evaluation_result = evaluate(&expr);
+            self.expr_history.push(expr);
+            evaluation_result.ok().or(Some("".into()))
+        })
     }
 
     fn build_frame() -> Frame {
@@ -110,7 +114,7 @@ impl ResultsPanel {
             .resizable(false)
             .show(ctx, |ui| {
                 self.results.iter().for_each(|result| {
-                    ui.add(Label::new(result));
+                    ui.add(Label::new(result).wrap(false).truncate(true));
                 })
             });
     }
