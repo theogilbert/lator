@@ -96,9 +96,7 @@ impl<'a> ExpressionScanner<'a> {
 enum TokenCandidate {
     Invalid,
     // `has_decimals` indicates whether this token already contains a decimal separator.
-    Number {
-        has_decimals: bool,
-    },
+    Number { has_decimals: bool },
 }
 
 impl TokenCandidate {
@@ -107,9 +105,7 @@ impl TokenCandidate {
             '0'..='9' => Number {
                 has_decimals: false,
             },
-            '.' => Number {
-                has_decimals: true,
-            },
+            '.' => Number { has_decimals: true },
             _ => Invalid,
         }
     }
@@ -145,11 +141,12 @@ impl TokenCandidate {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rstest::rstest;
 
     #[test]
     fn should_evaluate_empty_expr_as_no_token() {
         let expr = "";
-        assert_eq!(Vec::<Token>::default(), tokenize(expr));
+        assert_eq!(Vec::<Token>::new(), tokenize(expr));
     }
 
     #[test]
@@ -158,21 +155,13 @@ mod tests {
         assert_eq!(vec![Token::Invalid(expr)], tokenize(expr));
     }
 
-    #[test]
-    fn should_evaluate_number_as_valid_token() {
-        let expr = "123";
-        assert_eq!(vec![Token::Number(expr)], tokenize(expr));
-    }
-
-    #[test]
-    fn should_evaluate_decimal_number_as_valid_token() {
-        let expr = "123.45";
-        assert_eq!(vec![Token::Number(expr)], tokenize(expr));
-    }
-
-    #[test]
-    fn should_evaluate_decimal_number_starting_with_separator_as_valid_token() {
-        let expr = ".45";
+    #[rstest]
+    #[case("00")]
+    #[case("123")]
+    #[case("123.45")]
+    #[case(".3")]
+    #[case("18.")]
+    fn should_evaluate_number_as_valid_token(#[case] expr: &str) {
         assert_eq!(vec![Token::Number(expr)], tokenize(expr));
     }
 
@@ -185,12 +174,9 @@ mod tests {
         );
     }
 
-    #[test]
-    fn should_evaluate_tokens_as_sequence() {
-        let expr = "123abc";
-        assert_eq!(
-            vec![Token::Number("123"), Token::Invalid("abc")],
-            tokenize(expr)
-        );
+    #[rstest]
+    #[case("123abc", vec![Token::Number("123"), Token::Invalid("abc")])]
+    fn should_evaluate_expression_as_sequence(#[case] expr: &str, #[case] tokens: Vec<Token>) {
+        assert_eq!(tokens, tokenize(expr));
     }
 }
