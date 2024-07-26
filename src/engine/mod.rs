@@ -1,6 +1,16 @@
+use thiserror::Error;
+
 use crate::engine::token::{tokenize, TokenType};
 
 mod token;
+mod number;
+
+
+#[derive(Error, Debug, PartialEq)]
+pub enum Error {
+    #[error("number expression {0} has an invalid format: {1}")]
+    InvalidNumberExpr(String, String),
+}
 
 /** Evaluates textual expressions */
 pub fn evaluate(expr: &str) -> Result<String, ()> {
