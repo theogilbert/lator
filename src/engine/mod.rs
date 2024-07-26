@@ -1,30 +1,31 @@
 use thiserror::Error;
 
-use crate::engine::ast::{Node, NumberNode};
+use crate::engine::parser::parse;
 use crate::engine::token::tokenize;
 
-mod token;
 mod ast;
 mod number;
+mod parser;
+mod token;
 
 
 #[derive(Error, Debug, PartialEq)]
 pub enum Error {
-    #[error("this type of expression is not yet supported")]
-    UnsupportedExpression(),
     #[error("number expression {0} has an invalid format: {1}")]
     InvalidNumberExpr(String, String),
+    #[error("the expression is not yet supported")]
+    UnsupportedExpression(),
+    #[error("the expression is invalid")]
+    InvalidExpression(),
 }
 
 /** Evaluates textual expressions */
 pub fn evaluate(expr: &str) -> Result<String, Error> {
     let tokens = tokenize(expr);
 
-    if tokens.len() != 1 {
-        return Err(Error::UnsupportedExpression());
-    }
+    let ast_root = parse(&tokens)?;
 
-    Ok(NumberNode::from_str(tokens[0].content())?.resolve().to_string())
+    Ok(ast_root.resolve().to_string())
 }
 
 
@@ -32,11 +33,13 @@ pub fn evaluate(expr: &str) -> Result<String, Error> {
 mod tests {
     use rstest::rstest;
 
-    use super::evaluate;
+    use super::{Error, evaluate};
 
-    #[test]
-    fn test_invalid_expr() {
-        assert!(evaluate("invalid").is_err());
+    #[rstest]
+    #[case("")]
+    #[case("invalid")]
+    fn test_should_fail_when_expression_is_invalid(#[case] expr: &str) {
+        assert_eq!(evaluate(expr), Err(Error::InvalidExpression()));
     }
 
 
