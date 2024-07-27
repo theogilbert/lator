@@ -4,7 +4,7 @@ use std::ops::Add;
 use crate::engine::Error;
 
 /// A wrapper around a decimal number.
-#[derive(Copy, Clone, Debug, Default)]
+#[derive(Copy, Clone, Debug, Default, PartialEq)]
 pub struct Number {
     value: f64,
 }

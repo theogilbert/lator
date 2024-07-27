@@ -1,6 +1,7 @@
 use crate::engine::number::Number;
 use crate::engine::operator::OperatorType;
 
+#[derive(Debug, PartialEq)]
 pub enum Ast {
     Number(Number),
     Operator(OperatorType, Box<Ast>, Box<Ast>),
@@ -46,7 +47,11 @@ mod tests {
 
     #[test]
     fn should_add_numbers() {
-        let add = Ast::Operator(OperatorType::Addition, number(".456").into(), number("18.1").into());
+        let add = Ast::Operator(
+            OperatorType::Addition,
+            number(".456").into(),
+            number("18.1").into(),
+        );
         assert_eq!(add.resolve().to_string(), "18.556");
     }
 

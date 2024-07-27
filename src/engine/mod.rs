@@ -43,9 +43,9 @@ mod tests {
         assert_eq!(evaluate(expr), Err(Error::InvalidExpression()));
     }
 
-
     #[rstest]
     #[case("123", "123")]
+    #[case("18+1.48", "19.48")]
     fn test_should_evaluate_valid_expressions(#[case] num_repr: &str, #[case] result: &str) {
         assert_eq!(evaluate(num_repr), Ok(result.into()));
     }
