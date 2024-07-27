@@ -7,6 +7,7 @@ mod ast;
 mod number;
 mod parser;
 mod token;
+mod operator;
 
 
 #[derive(Error, Debug, PartialEq)]

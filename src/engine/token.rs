@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use lazy_static::lazy_static;
 use regex::Regex;
+use crate::engine::operator::OperatorType;
 
 /// A TokenType indicates the semantic nature of a token.
 #[derive(Eq, PartialEq, Debug, Copy, Clone, Hash)]
@@ -43,11 +44,6 @@ impl<'a> Token<'a> {
     pub fn content(&self) -> &str {
         self.content
     }
-}
-
-#[derive(Eq, PartialEq, Debug, Copy, Clone, Hash)]
-pub enum OperatorType {
-    Addition,
 }
 
 /** Split the expression in an ordered sequence of tokens.\

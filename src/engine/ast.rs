@@ -1,29 +1,24 @@
 use crate::engine::number::Number;
+use crate::engine::operator::OperatorType;
 
 pub enum Ast {
     Number(Number),
-    Operator(OperatorType, Box<Ast>, Box<Ast>)
+    Operator(OperatorType, Box<Ast>, Box<Ast>),
 }
 
 impl Ast {
     pub fn resolve(&self) -> Number {
         match self {
             Ast::Number(num) => *num,
-            Ast::Operator(op, lhs, rhs) => {
-                op.calculate(lhs.resolve(), rhs.resolve())
-            }
+            Ast::Operator(op, lhs, rhs) => op.calculate(lhs.resolve(), rhs.resolve()),
         }
     }
-}
-
-pub enum OperatorType {
-    Add
 }
 
 impl OperatorType {
     fn calculate(&self, lhs: Number, rhs: Number) -> Number {
         match self {
-            OperatorType::Add => lhs + rhs
+            OperatorType::Addition => lhs + rhs,
         }
     }
 }
@@ -51,7 +46,7 @@ mod tests {
 
     #[test]
     fn should_add_numbers() {
-        let add = Ast::Operator(OperatorType::Add, number(".456").into(), number("18.1").into());
+        let add = Ast::Operator(OperatorType::Addition, number(".456").into(), number("18.1").into());
         assert_eq!(add.resolve().to_string(), "18.556");
     }
 
