@@ -1,7 +1,8 @@
-use crate::engine::evaluate;
-use eframe::epaint::{Color32, FontFamily, FontId, Margin};
 use eframe::epaint::text::TextWrapMode;
+use eframe::epaint::{Color32, FontFamily, FontId, Margin};
 use egui::{CentralPanel, Context, Frame, Label, SidePanel, TextBuffer, TextEdit, TextStyle};
+
+use crate::engine::{evaluate, Error};
 
 #[derive(Default)]
 pub struct LatorApp {
@@ -15,7 +16,7 @@ impl LatorApp {
     const TEXT_SELECTION_COLOR: Color32 = Color32::from_rgb(140, 130, 115);
     const SEPARATOR_LINE_COLOR: Color32 = Color32::from_rgb(240, 230, 215);
     const RESULTS_BG_COLOR: Color32 = Color32::from_rgb(250, 245, 225);
-    const RESULTS_PANEL_RATIO: f32 = 1. / 2.5;
+    const RESULTS_PANEL_RATIO: f32 = 1. / 2.3;
 
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         cc.egui_ctx.style_mut(|style| {
@@ -33,10 +34,26 @@ impl LatorApp {
 impl eframe::App for LatorApp {
     fn update(&mut self, ctx: &Context, _frame: &mut eframe::Frame) {
         self.results_panel.show(ctx);
-        let result = self.input_panel.show(ctx);
 
-        if let Some(expr_result) = result {
-            self.results_panel.add_result(expr_result);
+        if let Some(submitted_expression) = self.input_panel.show(ctx) {
+            self.evaluate_expression(submitted_expression);
+        }
+    }
+}
+
+impl LatorApp {
+    // Evaluate an expression submitted by the user and reflect the result in the UI.
+    fn evaluate_expression(&mut self, expr: String) {
+        match evaluate(&expr) {
+            Ok(result) => {
+                self.input_panel.add_history(expr);
+                self.results_panel.add_result(result);
+            }
+            Err(Error::EmptyExpression()) => (), // Empty expressions are ignored.
+            Err(e) => {
+                self.input_panel.add_history(expr);
+                self.results_panel.add_result(e.to_string());
+            }
         }
     }
 }
@@ -72,11 +89,11 @@ impl InputPanel {
                 submission
             });
 
-        input_result.inner.and_then(|expr| {
-            let evaluation_result = evaluate(&expr);
-            self.expr_history.push(expr);
-            evaluation_result.ok().or(Some("".into()))
-        })
+        input_result.inner
+    }
+
+    pub fn add_history(&mut self, expr: String) {
+        self.expr_history.push(expr);
     }
 
     fn build_frame() -> Frame {
