@@ -11,25 +11,26 @@ pub fn parse(tokens: &[Token]) -> Result<Ast, Error> {
 // This function builds a naive AST in that it does not care about priority of operators.
 fn build_naive_tree(tokens: &[Token]) -> Result<Ast, Error> {
     if tokens.is_empty() {
-        return Err(Error::InvalidExpression());
+        return Err(Error::EmptyExpression());
     }
 
     let mut current_ast_root: Option<Ast> = None;
     let mut previous_operator: Option<OperatorType> = None;
 
-    for token in tokens {
+    for (idx, token) in tokens.iter().enumerate() {
         match token.token_type() {
             TokenType::Invalid => {
-                return Err(Error::InvalidExpression());
+                return Err(Error::InvalidExpression(token.into()));
             }
             TokenType::Number => {
                 if current_ast_root.is_some() && previous_operator.is_none() {
-                    return Err(Error::InvalidExpression());
+                    return Err(Error::InvalidExpression(token.into()));
                 }
 
                 let current_node = Ast::Number(Number::from_str(token.content())?);
                 if let Some(ope_type) = previous_operator {
-                    let lhs = current_ast_root.ok_or(Error::InvalidExpression())?;
+                    let lhs = current_ast_root
+                        .ok_or_else(|| Error::InvalidExpression((&tokens[idx - 1]).into()))?;
                     let ope = build_operator(ope_type, lhs, current_node);
                     current_ast_root = Some(ope);
                     previous_operator = None;
@@ -39,7 +40,7 @@ fn build_naive_tree(tokens: &[Token]) -> Result<Ast, Error> {
             }
             TokenType::Operator(ope_type) => {
                 if previous_operator.is_some() {
-                    return Err(Error::InvalidExpression());
+                    return Err(Error::InvalidExpression(token.into()));
                 }
                 previous_operator = Some(ope_type);
             }
@@ -47,10 +48,10 @@ fn build_naive_tree(tokens: &[Token]) -> Result<Ast, Error> {
     }
 
     if previous_operator.is_some() {
-        return Err(Error::InvalidExpression());
+        return Err(Error::InvalidExpression(tokens.last().unwrap().into()));
     }
 
-    current_ast_root.ok_or(Error::InvalidExpression())
+    current_ast_root.ok_or(Error::InvalidExpression(tokens.last().unwrap().into()))
 }
 
 fn build_operator(operator_type: OperatorType, lhs: Ast, rhs: Ast) -> Ast {
@@ -68,7 +69,7 @@ mod tests {
     use crate::engine::operator::OperatorType;
     use crate::engine::parser::parse;
     use crate::engine::token::{Token, TokenType};
-    use crate::engine::Error;
+    use crate::engine::{Error, TextSpan};
 
     const ADD_TOKEN_TYPE: TokenType = TokenType::Operator(OperatorType::Addition);
 
@@ -98,13 +99,13 @@ mod tests {
     #[test]
     fn test_parsing_no_tokens_should_fail() {
         let result = parse(&[]);
-        assert_eq!(result.err().unwrap(), Error::InvalidExpression());
+        assert_eq!(result.err().unwrap(), Error::EmptyExpression());
     }
 
     #[test]
     fn test_parsing_sequence_with_only_operator_should_fail() {
         assert_eq!(
-            Err(Error::InvalidExpression()),
+            Err(Error::InvalidExpression(TextSpan::new(0, 1))),
             parse(&[Token::new(ADD_TOKEN_TYPE, "+", 0)])
         );
     }
@@ -113,38 +114,50 @@ mod tests {
     fn test_parsing_sequence_with_only_operator_and_no_lhs_should_fail() {
         let seq = [
             Token::new(ADD_TOKEN_TYPE, "+", 0),
-            Token::new(TokenType::Number, "2", 0),
+            Token::new(TokenType::Number, "2", 1),
         ];
-        assert_eq!(Err(Error::InvalidExpression()), parse(&seq));
+        assert_eq!(
+            Err(Error::InvalidExpression(TextSpan::new(0, 1))),
+            parse(&seq)
+        );
     }
 
     #[test]
     fn test_parsing_sequence_with_adjacent_numbers_should_fail() {
         let seq = [
             Token::new(TokenType::Number, "1", 0),
-            Token::new(TokenType::Number, "2", 0),
+            Token::new(TokenType::Number, "2", 1),
         ];
-        assert_eq!(Err(Error::InvalidExpression()), parse(&seq));
+        assert_eq!(
+            Err(Error::InvalidExpression(TextSpan::new(1, 1))),
+            parse(&seq)
+        );
     }
 
     #[test]
     fn test_parsing_sequence_with_adjacent_operators_should_fail() {
         let seq = [
             Token::new(TokenType::Number, "1", 0),
-            Token::new(ADD_TOKEN_TYPE, "+", 0),
-            Token::new(ADD_TOKEN_TYPE, "+", 0),
-            Token::new(TokenType::Number, "2", 0),
+            Token::new(ADD_TOKEN_TYPE, "+", 1),
+            Token::new(ADD_TOKEN_TYPE, "+", 2),
+            Token::new(TokenType::Number, "2", 3),
         ];
-        assert_eq!(Err(Error::InvalidExpression()), parse(&seq));
+        assert_eq!(
+            Err(Error::InvalidExpression(TextSpan::new(2, 1))),
+            parse(&seq)
+        );
     }
 
     #[test]
     fn test_parsing_sequence_with_final_operator_should_fail() {
         let seq = [
             Token::new(TokenType::Number, "1", 0),
-            Token::new(ADD_TOKEN_TYPE, "+", 0),
+            Token::new(ADD_TOKEN_TYPE, "+", 1),
         ];
-        assert_eq!(Err(Error::InvalidExpression()), parse(&seq));
+        assert_eq!(
+            Err(Error::InvalidExpression(TextSpan::new(1, 1))),
+            parse(&seq)
+        );
     }
 
     fn number_node(value: &str) -> Ast {

@@ -38,6 +38,10 @@ impl<'a> Token<'a> {
         self.token_type
     }
 
+    pub fn start(&self) -> usize {
+        self.start
+    }
+
     pub fn length(&self) -> usize {
         self.content.len()
     }
