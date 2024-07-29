@@ -102,8 +102,9 @@ fn measure_leading_whitespace(expr: &str) -> usize {
 fn produce_next_token(expr: &str, cursor: usize) -> Token {
     let mut tokens: Vec<Token> = TOKEN_PATTERNS
         .iter()
-        .map(|(token_type, pattern)| build_next_token_with_pattern(expr, *token_type, pattern))
-        .filter_map(|token| token)
+        .filter_map(|(token_type, pattern)| {
+            build_token_matching_pattern(expr, *token_type, pattern)
+        })
         .collect();
 
     tokens.sort_by_key(|token| token.start);
@@ -125,14 +126,14 @@ fn produce_next_token(expr: &str, cursor: usize) -> Token {
 /// Produces the first [`Token`] in the expression which matches the given Regex pattern.
 ///
 /// Returns [`None`] if the expression contains no such token.
-fn build_next_token_with_pattern<'a>(
+fn build_token_matching_pattern<'a>(
     expr: &'a str,
     token_type: TokenType,
     pattern: &Regex,
 ) -> Option<Token<'a>> {
     pattern
         .find(expr)
-        .and_then(|re_match| Some(Token::new(token_type, re_match.as_str(), re_match.start())))
+        .map(|re_match| Token::new(token_type, re_match.as_str(), re_match.start()))
 }
 
 #[cfg(test)]
@@ -179,7 +180,10 @@ mod tests {
     #[case("+", OperatorType::Addition)]
     #[case("-", OperatorType::Subtraction)]
     fn should_evaluate_operator_as_valid_token(#[case] expr: &str, #[case] op_type: OperatorType) {
-        assert_eq!(vec![str_to_token(expr, TokenType::Operator(op_type))], tokenize(expr));
+        assert_eq!(
+            vec![str_to_token(expr, TokenType::Operator(op_type))],
+            tokenize(expr)
+        );
     }
 
     #[rstest]
