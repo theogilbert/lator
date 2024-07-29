@@ -14,57 +14,57 @@ fn build_naive_tree(tokens: &[Token]) -> Result<Ast, Error> {
         return Err(Error::EmptyExpression());
     }
 
-    let mut current_ast_root: Option<Ast> = None;
-    let mut previous_operator: Option<OperatorType> = None;
+    let mut parsing_context = ParsingContext::Empty;
 
-    for (idx, token) in tokens.iter().enumerate() {
-        match token.token_type() {
-            TokenType::Invalid => {
-                return Err(invalid_token_err(token));
-            }
-            TokenType::Number => {
-                if current_ast_root.is_some() && previous_operator.is_none() {
-                    return Err(invalid_token_err(token));
-                }
-
-                let current_node = Ast::Number(Number::from_str(token.content())?);
-                if let Some(ope_type) = previous_operator {
-                    let lhs = current_ast_root
-                        .ok_or_else(|| invalid_token_err(&tokens[idx - 1]))?;
-                    let ope = build_operator(ope_type, lhs, current_node);
-                    current_ast_root = Some(ope);
-                    previous_operator = None;
-                } else {
-                    current_ast_root = Some(current_node);
-                }
-            }
-            TokenType::Operator(ope_type) => {
-                if previous_operator.is_some() {
-                    return Err(invalid_token_err(token));
-                }
-                previous_operator = Some(ope_type);
-            }
-        }
+    for token in tokens.iter() {
+        parsing_context = parsing_context.update_from_next_token(token)?;
     }
 
     // unwrap() is safe as we checked that tokens is not empty
     let last_token = tokens.last().unwrap();
 
-    if previous_operator.is_some() {
-        return Err(invalid_token_err(last_token));
+    if let ParsingContext::Value(ast) = parsing_context {
+        Ok(ast)
+    } else {
+        Err(Error::InvalidExpression(last_token.start()))
     }
-
-    current_ast_root.ok_or(invalid_token_err(last_token))
 }
 
-fn invalid_token_err(token: &Token) -> Error {
-    Error::InvalidExpression(token.start())
+/// This class represents the state of the parser while parsing an AST.
+enum ParsingContext {
+    /// No tokens have been parsed yet. This is the initial state of the context.
+    Empty,
+    /// The parsed tokens resolve to a computable value.
+    Value(Ast),
+    /// An operation is pending, meaning that the last token which has been parsed is
+    /// an operation sign.
+    /// 1. The first field of this variant is the left hand side value.
+    /// 2. The second field indicates the operation to perform on this value.
+    ///
+    /// The operation will be complete when the right hand side value is parsed.
+    PendingOperation(Ast, OperatorType),
 }
 
-fn build_operator(operator_type: OperatorType, lhs: Ast, rhs: Ast) -> Ast {
-    match operator_type {
-        OperatorType::Addition => {
-            Ast::Operator(OperatorType::Addition, Box::new(lhs), Box::new(rhs))
+impl ParsingContext {
+    fn update_from_next_token(self, token: &Token) -> Result<Self, Error> {
+        match token.token_type() {
+            TokenType::Invalid => Err(Error::InvalidExpression(token.start())),
+            TokenType::Number => {
+                let current_node = Ast::Number(Number::from_str(token.content())?);
+
+                match self {
+                    Self::Empty => Ok(Self::Value(current_node)),
+                    Self::Value(_) => Err(Error::InvalidExpression(token.start())),
+                    Self::PendingOperation(lhs, op_type) => {
+                        let ope = Ast::Operator(op_type, Box::new(lhs), Box::new(current_node));
+                        Ok(Self::Value(ope))
+                    }
+                }
+            }
+            TokenType::Operator(ope_type) => match self {
+                ParsingContext::Value(lhs) => Ok(Self::PendingOperation(lhs, ope_type)),
+                _ => Err(Error::InvalidExpression(token.start())),
+            },
         }
     }
 }
