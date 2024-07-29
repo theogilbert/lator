@@ -1,7 +1,7 @@
 use thiserror::Error;
 
 use crate::engine::parser::parse;
-use crate::engine::token::{tokenize, Token};
+use crate::engine::token::tokenize;
 
 mod ast;
 mod number;
@@ -19,31 +19,10 @@ pub enum Error {
     #[error("number expression {0} has an invalid format: {1}")]
     InvalidNumberExpr(String, String),
     /// Indicates that an expression is invalid.
-    /// This error variant contains a TextSpan to indicate the portion of the expression that is invalid.
+    /// This error variant contains a field indicating from which position the expression
+    /// becomes invalid.
     #[error("invalid expression")]
-    InvalidExpression(TextSpan),
-}
-
-// Represents the position of a contiguous section of a String.
-#[derive(Debug, PartialEq)]
-pub struct TextSpan {
-    pub start: usize,
-    pub length: usize,
-}
-
-impl TextSpan {
-    pub fn new(start: usize, length: usize) -> Self {
-        TextSpan { start, length }
-    }
-}
-
-impl Into<TextSpan> for &Token<'_> {
-    fn into(self) -> TextSpan {
-        TextSpan {
-            start: self.start(),
-            length: self.length(),
-        }
-    }
+    InvalidExpression(usize),
 }
 
 /** Evaluates textual expressions */
