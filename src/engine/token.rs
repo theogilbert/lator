@@ -83,6 +83,10 @@ lazy_static! {
             TokenType::Operator(OperatorType::Addition),
             Regex::new(r"\+").unwrap()
         ),
+        (
+            TokenType::Operator(OperatorType::Subtraction),
+            Regex::new(r"-").unwrap()
+        ),
     ]);
 }
 
@@ -171,10 +175,11 @@ mod tests {
         );
     }
 
-    #[test]
-    fn should_evaluate_operator_as_valid_token() {
-        let add_token = str_to_token("+", TokenType::Operator(OperatorType::Addition));
-        assert_eq!(vec![add_token], tokenize("+"));
+    #[rstest]
+    #[case("+", OperatorType::Addition)]
+    #[case("-", OperatorType::Subtraction)]
+    fn should_evaluate_operator_as_valid_token(#[case] expr: &str, #[case] op_type: OperatorType) {
+        assert_eq!(vec![str_to_token(expr, TokenType::Operator(op_type))], tokenize(expr));
     }
 
     #[rstest]
