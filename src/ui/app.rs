@@ -1,7 +1,10 @@
 use eframe::epaint::text::{TextFormat, TextWrapMode};
 use eframe::epaint::{Color32, FontFamily, FontId, Margin};
 use egui::text::LayoutJob;
-use egui::{CentralPanel, Context, Frame, Label, SidePanel, TextBuffer, TextEdit, TextStyle};
+use egui::{
+    CentralPanel, Context, Frame, Galley, Label, SidePanel, TextBuffer, TextEdit, TextStyle, Ui,
+};
+use std::sync::Arc;
 
 use crate::engine::{evaluate, Error};
 
@@ -89,49 +92,73 @@ enum HistorizedExpression {
 }
 
 impl InputPanel {
-    /**
-    Displays the calculator's input panel, and returns an expression if the user submitted one.
-     */
+    /// Displays the calculator's input panel, and returns an expression if the user submitted one.
     pub fn show(&mut self, ctx: &Context) -> Option<String> {
-        let hist_text_format = TextFormat::simple(LatorApp::FONT_ID, LatorApp::HISTORY_TEXT_COLOR);
-        let err_text_format = TextFormat::simple(LatorApp::FONT_ID, LatorApp::ERROR_TEXT_COLOR);
-
         let history_entries: Vec<_> = self
             .expr_history
             .iter()
-            .map(|hist_expr| match hist_expr {
-                HistorizedExpression::Valid(expr) => {
-                    let mut layout_job = LayoutJob::default();
-                    layout_job.append(expr, 0., hist_text_format.clone());
-                    ctx.fonts(|fnt| fnt.layout_job(layout_job))
-                }
-                HistorizedExpression::Invalid(expr, invalid_start) => {
-                    let mut layout_job = LayoutJob::default();
-                    layout_job.append(&expr[0..*invalid_start], 0., hist_text_format.clone());
-                    layout_job.append(&expr[*invalid_start..], 0., err_text_format.clone());
-                    ctx.fonts(|fnt| fnt.layout_job(layout_job))
-                }
-            })
+            .map(|hist_expr| Self::layout_historized_expression(hist_expr, ctx))
             .collect();
 
         let input_result = CentralPanel::default()
             .frame(Self::build_frame())
             .show(ctx, |ui| {
-                history_entries.into_iter().for_each(|previous_expr| {
-                    ui.add(Label::new(previous_expr).truncate());
-                });
-
-                let expr_edit = self.build_expr_text_edit(ctx);
-                let edit_result = ui.add(expr_edit);
-
-                let expr_submitted = edit_result.lost_focus() && !self.expression.is_empty();
-                let submission = expr_submitted.then(|| self.expression.take());
-
-                edit_result.request_focus();
-                submission
+                self.show_and_ret_submitted_expr(ui, history_entries, ctx)
             });
 
         input_result.inner
+    }
+
+    fn show_and_ret_submitted_expr(
+        &mut self,
+        ui: &mut Ui,
+        history_entries: Vec<Arc<Galley>>,
+        ctx: &Context,
+    ) -> Option<String> {
+        history_entries.into_iter().for_each(|previous_expr| {
+            ui.add(Label::new(previous_expr).truncate());
+        });
+
+        let expr_edit = self.build_expr_text_edit(ctx);
+        let edit_result = ui.add(expr_edit);
+
+        let expr_submitted = edit_result.lost_focus() && !self.expression.is_empty();
+        let submission = expr_submitted.then(|| self.expression.take());
+
+        edit_result.request_focus();
+        submission
+    }
+
+    /// Produce a Galley representing the rendered historized expression.
+    fn layout_historized_expression(
+        hist_expr: &HistorizedExpression,
+        ctx: &Context,
+    ) -> Arc<Galley> {
+        match hist_expr {
+            HistorizedExpression::Valid(expr) => {
+                let mut layout_job = LayoutJob::default();
+                layout_job.append(
+                    expr,
+                    0.,
+                    TextFormat::simple(LatorApp::FONT_ID, LatorApp::HISTORY_TEXT_COLOR),
+                );
+                ctx.fonts(|fnt| fnt.layout_job(layout_job))
+            }
+            HistorizedExpression::Invalid(expr, invalid_start) => {
+                let mut layout_job = LayoutJob::default();
+                layout_job.append(
+                    &expr[0..*invalid_start],
+                    0.,
+                    TextFormat::simple(LatorApp::FONT_ID, LatorApp::HISTORY_TEXT_COLOR).clone(),
+                );
+                layout_job.append(
+                    &expr[*invalid_start..],
+                    0.,
+                    TextFormat::simple(LatorApp::FONT_ID, LatorApp::ERROR_TEXT_COLOR).clone(),
+                );
+                ctx.fonts(|fnt| fnt.layout_job(layout_job))
+            }
+        }
     }
 
     pub fn add_history(&mut self, expr: HistorizedExpression) {
