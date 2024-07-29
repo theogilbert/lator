@@ -1,5 +1,6 @@
-use eframe::epaint::text::TextWrapMode;
+use eframe::epaint::text::{TextFormat, TextWrapMode};
 use eframe::epaint::{Color32, FontFamily, FontId, Margin};
+use egui::text::LayoutJob;
 use egui::{CentralPanel, Context, Frame, Label, SidePanel, TextBuffer, TextEdit, TextStyle};
 
 use crate::engine::{evaluate, Error};
@@ -11,18 +12,22 @@ pub struct LatorApp {
 }
 
 impl LatorApp {
-    const FRAME_MARGIN: Margin = Margin::same(5.);
     const MAIN_BG_COLOR: Color32 = Color32::WHITE;
-    const TEXT_SELECTION_COLOR: Color32 = Color32::from_rgb(140, 130, 115);
-    const SEPARATOR_LINE_COLOR: Color32 = Color32::from_rgb(240, 230, 215);
     const RESULTS_BG_COLOR: Color32 = Color32::from_rgb(250, 245, 225);
+
     const RESULTS_PANEL_RATIO: f32 = 1. / 2.3;
+    const SEPARATOR_LINE_COLOR: Color32 = Color32::from_rgb(240, 230, 215);
+    const FRAME_MARGIN: Margin = Margin::same(5.);
+
+    const HISTORY_TEXT_COLOR: Color32 = Color32::from_rgb(100, 100, 100);
+    const ERROR_TEXT_COLOR: Color32 = Color32::from_rgb(200, 30, 30);
+    const TEXT_SELECTION_COLOR: Color32 = Color32::from_rgb(140, 130, 115);
+
+    const FONT_ID: FontId = FontId::new(15.0, FontFamily::Monospace);
 
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         cc.egui_ctx.style_mut(|style| {
-            style
-                .text_styles
-                .insert(TextStyle::Body, FontId::new(15.0, FontFamily::Monospace));
+            style.text_styles.insert(TextStyle::Body, Self::FONT_ID);
             style.visuals.widgets.noninteractive.bg_stroke.color = Self::SEPARATOR_LINE_COLOR;
             style.visuals.selection.bg_fill = Self::TEXT_SELECTION_COLOR;
         });
@@ -46,13 +51,21 @@ impl LatorApp {
     fn evaluate_expression(&mut self, expr: String) {
         match evaluate(&expr) {
             Ok(result) => {
-                self.input_panel.add_history(expr);
+                self.input_panel
+                    .add_history(HistorizedExpression::Valid(expr));
                 self.results_panel.add_result(result);
             }
             Err(Error::EmptyExpression()) => (), // Empty expressions are ignored.
-            Err(e) => {
-                self.input_panel.add_history(expr);
-                self.results_panel.add_result(e.to_string());
+            Err(Error::InvalidExpression(text_span)) => {
+                self.input_panel
+                    .add_history(HistorizedExpression::Invalid(expr, text_span));
+                self.results_panel.add_result("invalid expression".into());
+            }
+            Err(unexpected) => {
+                eprintln!("Unexpected expression evaluation error: {:?}", unexpected);
+                self.input_panel
+                    .add_history(HistorizedExpression::Invalid(expr, 0));
+                self.results_panel.add_result("unexpected error".into());
             }
         }
     }
@@ -64,7 +77,15 @@ struct InputPanel {
     /// The current expression being written by the user.
     expression: String,
     /// Previously submitted expressions
-    expr_history: Vec<String>,
+    expr_history: Vec<HistorizedExpression>,
+}
+
+enum HistorizedExpression {
+    /// Denotes a valid expression.
+    Valid(String),
+    /// Denotes an invalid expression.
+    /// The second field indicates from which position the expression is invalid.
+    Invalid(String, usize),
 }
 
 impl InputPanel {
@@ -72,10 +93,31 @@ impl InputPanel {
     Displays the calculator's input panel, and returns an expression if the user submitted one.
      */
     pub fn show(&mut self, ctx: &Context) -> Option<String> {
+        let hist_text_format = TextFormat::simple(LatorApp::FONT_ID, LatorApp::HISTORY_TEXT_COLOR);
+        let err_text_format = TextFormat::simple(LatorApp::FONT_ID, LatorApp::ERROR_TEXT_COLOR);
+
+        let history_entries: Vec<_> = self
+            .expr_history
+            .iter()
+            .map(|hist_expr| match hist_expr {
+                HistorizedExpression::Valid(expr) => {
+                    let mut layout_job = LayoutJob::default();
+                    layout_job.append(expr, 0., hist_text_format.clone());
+                    ctx.fonts(|fnt| fnt.layout_job(layout_job))
+                }
+                HistorizedExpression::Invalid(expr, invalid_start) => {
+                    let mut layout_job = LayoutJob::default();
+                    layout_job.append(&expr[0..*invalid_start], 0., hist_text_format.clone());
+                    layout_job.append(&expr[*invalid_start..], 0., err_text_format.clone());
+                    ctx.fonts(|fnt| fnt.layout_job(layout_job))
+                }
+            })
+            .collect();
+
         let input_result = CentralPanel::default()
             .frame(Self::build_frame())
             .show(ctx, |ui| {
-                self.expr_history.iter().for_each(|previous_expr| {
+                history_entries.into_iter().for_each(|previous_expr| {
                     ui.add(Label::new(previous_expr).truncate());
                 });
 
@@ -92,7 +134,7 @@ impl InputPanel {
         input_result.inner
     }
 
-    pub fn add_history(&mut self, expr: String) {
+    pub fn add_history(&mut self, expr: HistorizedExpression) {
         self.expr_history.push(expr);
     }
 
