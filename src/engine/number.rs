@@ -1,6 +1,7 @@
-use std::num::ParseFloatError;
 use std::fmt::Display;
-use std::ops::Add;
+use std::num::ParseFloatError;
+use std::ops::{Add, Sub};
+
 use crate::engine::Error;
 
 /// A wrapper around a decimal number.
@@ -10,9 +11,8 @@ pub struct Number {
 }
 
 impl Number {
-
     pub fn from_str(decimal_repr: &str) -> Result<Self, Error> {
-        let value = decimal_repr.parse().map_err(|pre:  ParseFloatError| {
+        let value = decimal_repr.parse().map_err(|pre: ParseFloatError| {
             Error::InvalidNumberExpr(decimal_repr.to_string(), pre.to_string())
         })?;
         Ok(Number { value })
@@ -29,7 +29,19 @@ impl Add for Number {
     type Output = Self;
 
     fn add(self, rhs: Self) -> Self::Output {
-        return Number { value: self.value + rhs.value }
+        Number {
+            value: self.value + rhs.value,
+        }
+    }
+}
+
+impl Sub for Number {
+    type Output = Self;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        Number {
+            value: self.value - rhs.value,
+        }
     }
 }
 
@@ -48,5 +60,12 @@ mod tests {
         let lhs = Number::from_str(".123").unwrap();
         let rhs = Number::from_str("4").unwrap();
         assert_eq!("4.123", (lhs + rhs).to_string());
+    }
+
+    #[test]
+    fn test_sub_number() {
+        let lhs = Number::from_str("3.5").unwrap();
+        let rhs = Number::from_str("1").unwrap();
+        assert_eq!("2.5", (lhs - rhs).to_string());
     }
 }
