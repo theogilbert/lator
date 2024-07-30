@@ -14,7 +14,7 @@ fn main() {
     let result = eframe::run_native(
         "Lator",
         native_options,
-        Box::new(|cc| Box::new(LatorApp::new(cc))),
+        Box::new(|cc| Ok(Box::new(LatorApp::new(cc)))),
     );
 
     if result.is_err() {

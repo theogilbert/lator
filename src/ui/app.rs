@@ -1,5 +1,6 @@
 use crate::engine::evaluate;
 use eframe::epaint::{Color32, FontFamily, FontId, Margin};
+use eframe::epaint::text::TextWrapMode;
 use egui::{CentralPanel, Context, Frame, Label, SidePanel, TextBuffer, TextEdit, TextStyle};
 
 #[derive(Default)]
@@ -58,7 +59,7 @@ impl InputPanel {
             .frame(Self::build_frame())
             .show(ctx, |ui| {
                 self.expr_history.iter().for_each(|previous_expr| {
-                    ui.add(Label::new(previous_expr).truncate(true));
+                    ui.add(Label::new(previous_expr).truncate());
                 });
 
                 let expr_edit = self.build_expr_text_edit(ctx);
@@ -114,7 +115,7 @@ impl ResultsPanel {
             .resizable(false)
             .show(ctx, |ui| {
                 self.results.iter().for_each(|result| {
-                    ui.add(Label::new(result).wrap(false).truncate(true));
+                    ui.add(Label::new(result).wrap_mode(TextWrapMode::Truncate));
                 })
             });
     }
