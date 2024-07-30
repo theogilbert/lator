@@ -11,16 +11,23 @@ mod token;
 
 #[derive(Error, Debug, PartialEq)]
 pub enum Error {
+    /// Indicates that an expression is empty.
+    /// Empty expressions are considered as invalid as no result can be produced from
+    /// such expressions.
+    #[error("empty expression")]
+    EmptyExpression(),
     #[error("number expression {0} has an invalid format: {1}")]
     InvalidNumberExpr(String, String),
-    #[error("the expression is invalid")]
-    InvalidExpression(),
+    /// Indicates that an expression is invalid.
+    /// This error variant contains a field indicating from which position the expression
+    /// becomes invalid.
+    #[error("invalid expression")]
+    InvalidExpression(usize),
 }
 
 /** Evaluates textual expressions */
 pub fn evaluate(expr: &str) -> Result<String, Error> {
     let tokens = tokenize(expr);
-
     let ast_root = parse(&tokens)?;
 
     Ok(ast_root.resolve().to_string())
@@ -34,12 +41,18 @@ mod tests {
 
     #[rstest]
     #[case("")]
+    #[case("   \t ")]
+    fn test_should_fail_when_expression_is_empty(#[case] expr: &str) {
+        assert_eq!(evaluate(expr), Err(Error::EmptyExpression()));
+    }
+
+    #[rstest]
     #[case("invalid")]
     #[case("+1")]
     #[case("1+")]
     #[case("1++1")]
     fn test_should_fail_when_expression_is_invalid(#[case] expr: &str) {
-        assert_eq!(evaluate(expr), Err(Error::InvalidExpression()));
+        assert!(matches!(evaluate(expr), Err(Error::InvalidExpression(_))));
     }
 
     #[rstest]

@@ -1,7 +1,12 @@
-use crate::engine::evaluate;
+use eframe::epaint::text::{TextFormat, TextWrapMode};
 use eframe::epaint::{Color32, FontFamily, FontId, Margin};
-use eframe::epaint::text::TextWrapMode;
-use egui::{CentralPanel, Context, Frame, Label, SidePanel, TextBuffer, TextEdit, TextStyle};
+use egui::text::LayoutJob;
+use egui::{
+    CentralPanel, Context, Frame, Galley, Label, SidePanel, TextBuffer, TextEdit, TextStyle, Ui,
+};
+use std::sync::Arc;
+
+use crate::engine::{evaluate, Error};
 
 #[derive(Default)]
 pub struct LatorApp {
@@ -10,18 +15,22 @@ pub struct LatorApp {
 }
 
 impl LatorApp {
-    const FRAME_MARGIN: Margin = Margin::same(5.);
     const MAIN_BG_COLOR: Color32 = Color32::WHITE;
-    const TEXT_SELECTION_COLOR: Color32 = Color32::from_rgb(140, 130, 115);
-    const SEPARATOR_LINE_COLOR: Color32 = Color32::from_rgb(240, 230, 215);
     const RESULTS_BG_COLOR: Color32 = Color32::from_rgb(250, 245, 225);
-    const RESULTS_PANEL_RATIO: f32 = 1. / 2.5;
+
+    const RESULTS_PANEL_RATIO: f32 = 1. / 2.3;
+    const SEPARATOR_LINE_COLOR: Color32 = Color32::from_rgb(240, 230, 215);
+    const FRAME_MARGIN: Margin = Margin::same(5.);
+
+    const HISTORY_TEXT_COLOR: Color32 = Color32::from_rgb(100, 100, 100);
+    const ERROR_TEXT_COLOR: Color32 = Color32::from_rgb(200, 30, 30);
+    const TEXT_SELECTION_COLOR: Color32 = Color32::from_rgb(140, 130, 115);
+
+    const FONT_ID: FontId = FontId::new(15.0, FontFamily::Monospace);
 
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         cc.egui_ctx.style_mut(|style| {
-            style
-                .text_styles
-                .insert(TextStyle::Body, FontId::new(15.0, FontFamily::Monospace));
+            style.text_styles.insert(TextStyle::Body, Self::FONT_ID);
             style.visuals.widgets.noninteractive.bg_stroke.color = Self::SEPARATOR_LINE_COLOR;
             style.visuals.selection.bg_fill = Self::TEXT_SELECTION_COLOR;
         });
@@ -33,10 +42,34 @@ impl LatorApp {
 impl eframe::App for LatorApp {
     fn update(&mut self, ctx: &Context, _frame: &mut eframe::Frame) {
         self.results_panel.show(ctx);
-        let result = self.input_panel.show(ctx);
 
-        if let Some(expr_result) = result {
-            self.results_panel.add_result(expr_result);
+        if let Some(submitted_expression) = self.input_panel.show(ctx) {
+            self.evaluate_expression(submitted_expression);
+        }
+    }
+}
+
+impl LatorApp {
+    // Evaluate an expression submitted by the user and reflect the result in the UI.
+    fn evaluate_expression(&mut self, expr: String) {
+        match evaluate(&expr) {
+            Ok(result) => {
+                self.input_panel
+                    .add_history(HistorizedExpression::Valid(expr));
+                self.results_panel.add_result(result);
+            }
+            Err(Error::EmptyExpression()) => (), // Empty expressions are ignored.
+            Err(Error::InvalidExpression(text_span)) => {
+                self.input_panel
+                    .add_history(HistorizedExpression::Invalid(expr, text_span));
+                self.results_panel.add_result("invalid expression".into());
+            }
+            Err(unexpected) => {
+                eprintln!("Unexpected expression evaluation error: {:?}", unexpected);
+                self.input_panel
+                    .add_history(HistorizedExpression::Invalid(expr, 0));
+                self.results_panel.add_result("unexpected error".into());
+            }
         }
     }
 }
@@ -47,36 +80,89 @@ struct InputPanel {
     /// The current expression being written by the user.
     expression: String,
     /// Previously submitted expressions
-    expr_history: Vec<String>,
+    expr_history: Vec<HistorizedExpression>,
+}
+
+enum HistorizedExpression {
+    /// Denotes a valid expression.
+    Valid(String),
+    /// Denotes an invalid expression.
+    /// The second field indicates from which position the expression is invalid.
+    Invalid(String, usize),
 }
 
 impl InputPanel {
-    /**
-    Displays the calculator's input panel, and returns an expression if the user submitted one.
-     */
+    /// Displays the calculator's input panel, and returns an expression if the user submitted one.
     pub fn show(&mut self, ctx: &Context) -> Option<String> {
+        let history_entries: Vec<_> = self
+            .expr_history
+            .iter()
+            .map(|hist_expr| Self::layout_historized_expression(hist_expr, ctx))
+            .collect();
+
         let input_result = CentralPanel::default()
             .frame(Self::build_frame())
             .show(ctx, |ui| {
-                self.expr_history.iter().for_each(|previous_expr| {
-                    ui.add(Label::new(previous_expr).truncate());
-                });
-
-                let expr_edit = self.build_expr_text_edit(ctx);
-                let edit_result = ui.add(expr_edit);
-
-                let expr_submitted = edit_result.lost_focus() && !self.expression.is_empty();
-                let submission = expr_submitted.then(|| self.expression.take());
-
-                edit_result.request_focus();
-                submission
+                self.show_and_ret_submitted_expr(ui, history_entries, ctx)
             });
 
-        input_result.inner.and_then(|expr| {
-            let evaluation_result = evaluate(&expr);
-            self.expr_history.push(expr);
-            evaluation_result.ok().or(Some("".into()))
-        })
+        input_result.inner
+    }
+
+    fn show_and_ret_submitted_expr(
+        &mut self,
+        ui: &mut Ui,
+        history_entries: Vec<Arc<Galley>>,
+        ctx: &Context,
+    ) -> Option<String> {
+        history_entries.into_iter().for_each(|previous_expr| {
+            ui.add(Label::new(previous_expr).truncate());
+        });
+
+        let expr_edit = self.build_expr_text_edit(ctx);
+        let edit_result = ui.add(expr_edit);
+
+        let expr_submitted = edit_result.lost_focus() && !self.expression.is_empty();
+        let submission = expr_submitted.then(|| self.expression.take());
+
+        edit_result.request_focus();
+        submission
+    }
+
+    /// Produce a Galley representing the rendered historized expression.
+    fn layout_historized_expression(
+        hist_expr: &HistorizedExpression,
+        ctx: &Context,
+    ) -> Arc<Galley> {
+        match hist_expr {
+            HistorizedExpression::Valid(expr) => {
+                let mut layout_job = LayoutJob::default();
+                layout_job.append(
+                    expr,
+                    0.,
+                    TextFormat::simple(LatorApp::FONT_ID, LatorApp::HISTORY_TEXT_COLOR),
+                );
+                ctx.fonts(|fnt| fnt.layout_job(layout_job))
+            }
+            HistorizedExpression::Invalid(expr, invalid_start) => {
+                let mut layout_job = LayoutJob::default();
+                layout_job.append(
+                    &expr[0..*invalid_start],
+                    0.,
+                    TextFormat::simple(LatorApp::FONT_ID, LatorApp::HISTORY_TEXT_COLOR).clone(),
+                );
+                layout_job.append(
+                    &expr[*invalid_start..],
+                    0.,
+                    TextFormat::simple(LatorApp::FONT_ID, LatorApp::ERROR_TEXT_COLOR).clone(),
+                );
+                ctx.fonts(|fnt| fnt.layout_job(layout_job))
+            }
+        }
+    }
+
+    pub fn add_history(&mut self, expr: HistorizedExpression) {
+        self.expr_history.push(expr);
     }
 
     fn build_frame() -> Frame {
