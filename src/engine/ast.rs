@@ -20,6 +20,7 @@ impl OperatorType {
     fn calculate(&self, lhs: Number, rhs: Number) -> Number {
         match self {
             OperatorType::Addition => lhs + rhs,
+            OperatorType::Subtraction => lhs - rhs,
         }
     }
 }

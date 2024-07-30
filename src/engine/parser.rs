@@ -5,7 +5,7 @@ use crate::engine::token::{Token, TokenType};
 use crate::engine::Error;
 
 pub fn parse(tokens: &[Token]) -> Result<Ast, Error> {
-    return build_naive_tree(tokens);
+    build_naive_tree(tokens)
 }
 
 // This function builds a naive AST in that it does not care about priority of operators.
