@@ -1,0 +1,27 @@
+name: Build and deploy
+
+on:
+  workflow_call:
+    inputs:
+      platform-label:
+        required: true
+        description: The label of a platform on which to run the workflow.
+        type: string
+
+jobs:
+  build-and-upload:
+    runs-on: ${{ inputs.platform-label }}
+
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      RELEASE_ID: ${{ github.event.release.id }}
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Update rustup
+        run: rustup update stable
+
+      - name: Build and release Linux binaries
+        shell: bash
+        run: ./cd/build-and-upload.sh 0.0.1
