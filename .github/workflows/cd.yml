@@ -1,0 +1,22 @@
+name: Continuous Deployment
+
+on:
+  release:
+    types: [ 'published' ]
+
+permissions:
+  contents: write
+
+jobs:
+  
+  build-on-linux:
+    uses: ./.github/workflows/build-and-upload.yml
+    secrets: inherit
+    with:
+      platform-label: ubuntu-latest
+
+  build-on-windows:
+    uses: ./.github/workflows/build-and-upload.yml
+    secrets: inherit
+    with:
+      platform-label: windows-latest

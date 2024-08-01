@@ -1,3 +1,5 @@
+#![windows_subsystem = "windows"]
+
 use eframe::Theme;
 use egui::ViewportBuilder;
 use lator::ui::app::LatorApp;

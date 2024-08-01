@@ -1,0 +1,30 @@
+name: Run tests
+
+on:
+  workflow_call:
+    inputs:
+      platform-label:
+        required: true
+        description: The label of a platform on which to run the workflow.
+        type: string
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    runs-on: ${{ inputs.platform-label }}
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Update rustup
+        run: rustup update stable
+
+      - name: Check format
+        run: cargo fmt --all -- --check
+
+      - name: Check code smells
+        run: cargo clippy
+
+      - name: Run tests
+        run: cargo test
