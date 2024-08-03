@@ -1,12 +1,15 @@
+use std::sync::Arc;
+
 use eframe::epaint::text::{TextFormat, TextWrapMode};
-use eframe::epaint::{Color32, FontFamily, FontId, Margin};
+use eframe::epaint::Margin;
 use egui::text::LayoutJob;
+use egui::RichText;
 use egui::{
     CentralPanel, Context, Frame, Galley, Label, SidePanel, TextBuffer, TextEdit, TextStyle, Ui,
 };
-use std::sync::Arc;
 
 use crate::engine::{evaluate, Error};
+use crate::ui::theme;
 
 #[derive(Default)]
 pub struct LatorApp {
@@ -15,24 +18,11 @@ pub struct LatorApp {
 }
 
 impl LatorApp {
-    const MAIN_BG_COLOR: Color32 = Color32::WHITE;
-    const RESULTS_BG_COLOR: Color32 = Color32::from_rgb(250, 245, 225);
-
-    const RESULTS_PANEL_RATIO: f32 = 1. / 2.3;
-    const SEPARATOR_LINE_COLOR: Color32 = Color32::from_rgb(240, 230, 215);
-    const FRAME_MARGIN: Margin = Margin::same(5.);
-
-    const HISTORY_TEXT_COLOR: Color32 = Color32::from_rgb(100, 100, 100);
-    const ERROR_TEXT_COLOR: Color32 = Color32::from_rgb(200, 30, 30);
-    const TEXT_SELECTION_COLOR: Color32 = Color32::from_rgb(140, 130, 115);
-
-    const FONT_ID: FontId = FontId::new(15.0, FontFamily::Monospace);
-
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         cc.egui_ctx.style_mut(|style| {
-            style.text_styles.insert(TextStyle::Body, Self::FONT_ID);
-            style.visuals.widgets.noninteractive.bg_stroke.color = Self::SEPARATOR_LINE_COLOR;
-            style.visuals.selection.bg_fill = Self::TEXT_SELECTION_COLOR;
+            style.text_styles.insert(TextStyle::Body, theme::FONT_ID);
+            style.visuals.widgets.noninteractive.bg_stroke.width = 0.;
+            style.visuals.selection.bg_fill = theme::TEXT_SELECTION_COLOR;
         });
 
         Self::default()
@@ -56,19 +46,21 @@ impl LatorApp {
             Ok(result) => {
                 self.input_panel
                     .add_history(HistorizedExpression::Valid(expr));
-                self.results_panel.add_result(result);
+                self.results_panel.add_result(Result::Value(result));
             }
             Err(Error::EmptyExpression()) => (), // Empty expressions are ignored.
             Err(Error::InvalidExpression(text_span)) => {
                 self.input_panel
                     .add_history(HistorizedExpression::Invalid(expr, text_span));
-                self.results_panel.add_result("invalid expression".into());
+                self.results_panel
+                    .add_result(Result::Error("invalid expression".into()));
             }
             Err(unexpected) => {
                 eprintln!("Unexpected expression evaluation error: {:?}", unexpected);
                 self.input_panel
                     .add_history(HistorizedExpression::Invalid(expr, 0));
-                self.results_panel.add_result("unexpected error".into());
+                self.results_panel
+                    .add_result(Result::Error("unexpected error".into()));
             }
         }
     }
@@ -103,7 +95,7 @@ impl InputPanel {
         let input_result = CentralPanel::default()
             .frame(Self::build_frame())
             .show(ctx, |ui| {
-                self.show_and_ret_submitted_expr(ui, history_entries, ctx)
+                self.show_and_ret_submitted_expr(ui, history_entries)
             });
 
         input_result.inner
@@ -113,13 +105,12 @@ impl InputPanel {
         &mut self,
         ui: &mut Ui,
         history_entries: Vec<Arc<Galley>>,
-        ctx: &Context,
     ) -> Option<String> {
         history_entries.into_iter().for_each(|previous_expr| {
             ui.add(Label::new(previous_expr).truncate());
         });
 
-        let expr_edit = self.build_expr_text_edit(ctx);
+        let expr_edit = self.build_expr_text_edit();
         let edit_result = ui.add(expr_edit);
 
         let expr_submitted = edit_result.lost_focus() && !self.expression.is_empty();
@@ -140,7 +131,7 @@ impl InputPanel {
                 layout_job.append(
                     expr,
                     0.,
-                    TextFormat::simple(LatorApp::FONT_ID, LatorApp::HISTORY_TEXT_COLOR),
+                    TextFormat::simple(theme::FONT_ID, theme::PREVIOUS_TEXT_COLOR),
                 );
                 ctx.fonts(|fnt| fnt.layout_job(layout_job))
             }
@@ -149,12 +140,12 @@ impl InputPanel {
                 layout_job.append(
                     &expr[0..*invalid_start],
                     0.,
-                    TextFormat::simple(LatorApp::FONT_ID, LatorApp::HISTORY_TEXT_COLOR).clone(),
+                    TextFormat::simple(theme::FONT_ID, theme::PREVIOUS_TEXT_COLOR).clone(),
                 );
                 layout_job.append(
                     &expr[*invalid_start..],
                     0.,
-                    TextFormat::simple(LatorApp::FONT_ID, LatorApp::ERROR_TEXT_COLOR).clone(),
+                    TextFormat::simple(theme::FONT_ID, theme::ERROR_TEXT_COLOR).clone(),
                 );
                 ctx.fonts(|fnt| fnt.layout_job(layout_job))
             }
@@ -167,16 +158,16 @@ impl InputPanel {
 
     fn build_frame() -> Frame {
         Frame::default()
-            .fill(LatorApp::MAIN_BG_COLOR)
-            .inner_margin(LatorApp::FRAME_MARGIN)
+            .fill(theme::INPUT_BG_COLOR)
+            .inner_margin(theme::PANEL_MARGIN)
     }
 
-    fn build_expr_text_edit(&mut self, ctx: &Context) -> TextEdit {
+    fn build_expr_text_edit(&mut self) -> TextEdit {
         TextEdit::singleline(&mut self.expression)
             .desired_width(f32::INFINITY)
             .margin(Margin::ZERO)
             .frame(false)
-            .text_color(ctx.style().visuals.text_color())
+            .text_color(theme::INPUT_TEXT_COLOR)
             .lock_focus(true)
     }
 }
@@ -187,13 +178,13 @@ impl InputPanel {
 /// With egui, innermost panels should be added first ot the UI.
 #[derive(Default)]
 struct ResultsPanel {
-    results: Vec<String>,
+    results: Vec<Result>,
 }
 
 impl ResultsPanel {
     pub fn show(&mut self, ctx: &Context) {
         let ui_width = ctx.available_rect().width();
-        let panel_width = (ui_width * LatorApp::RESULTS_PANEL_RATIO).floor();
+        let panel_width = (ui_width * theme::RESULTS_PANEL_RATIO).floor();
 
         SidePanel::right("results")
             .frame(Self::build_frame())
@@ -201,18 +192,36 @@ impl ResultsPanel {
             .resizable(false)
             .show(ctx, |ui| {
                 self.results.iter().for_each(|result| {
-                    ui.add(Label::new(result).wrap_mode(TextWrapMode::Truncate));
+                    ui.add(Self::build_label_from_result(result));
                 })
             });
     }
 
-    pub fn add_result(&mut self, result: String) {
+    pub fn add_result(&mut self, result: Result) {
         self.results.push(result);
+    }
+
+    fn build_label_from_result(result: &Result) -> Label {
+        let rich_text = match result {
+            Result::Value(content) => {
+                RichText::new(content.to_string()).color(theme::RESULTS_TEXT_COLOR)
+            }
+            Result::Error(content) => {
+                RichText::new(content.to_string()).color(theme::ERROR_TEXT_COLOR)
+            }
+        };
+
+        Label::new(rich_text).wrap_mode(TextWrapMode::Truncate)
     }
 
     fn build_frame() -> Frame {
         Frame::default()
-            .fill(LatorApp::RESULTS_BG_COLOR)
-            .inner_margin(LatorApp::FRAME_MARGIN)
+            .fill(theme::RESULTS_BG_COLOR)
+            .inner_margin(theme::PANEL_MARGIN)
     }
+}
+
+enum Result {
+    Value(String),
+    Error(String),
 }
