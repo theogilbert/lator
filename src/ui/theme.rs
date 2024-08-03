@@ -9,7 +9,7 @@ pub const RESULTS_BG_COLOR: Color32 = Color32::from_rgb(208, 208, 208);
 pub const INPUT_TEXT_COLOR: Color32 = Color32::from_rgb(34, 34, 34);
 /// The font color of previously submitted expressions.
 pub const PREVIOUS_TEXT_COLOR: Color32 = Color32::from_rgb(68, 68, 68);
-/// The font color of invalid tokens in previously submitted expressions.
+/// The font color of error messages and invalid tokens in previously submitted expressions.
 pub const ERROR_TEXT_COLOR: Color32 = Color32::from_rgb(185, 48, 42);
 /// The font color of the results.
 pub const RESULTS_TEXT_COLOR: Color32 = Color32::from_rgb(100, 100, 100);

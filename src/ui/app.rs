@@ -46,19 +46,21 @@ impl LatorApp {
             Ok(result) => {
                 self.input_panel
                     .add_history(HistorizedExpression::Valid(expr));
-                self.results_panel.add_result(result);
+                self.results_panel.add_result(Result::Value(result));
             }
             Err(Error::EmptyExpression()) => (), // Empty expressions are ignored.
             Err(Error::InvalidExpression(text_span)) => {
                 self.input_panel
                     .add_history(HistorizedExpression::Invalid(expr, text_span));
-                self.results_panel.add_result("invalid expression".into());
+                self.results_panel
+                    .add_result(Result::Error("invalid expression".into()));
             }
             Err(unexpected) => {
                 eprintln!("Unexpected expression evaluation error: {:?}", unexpected);
                 self.input_panel
                     .add_history(HistorizedExpression::Invalid(expr, 0));
-                self.results_panel.add_result("unexpected error".into());
+                self.results_panel
+                    .add_result(Result::Error("unexpected error".into()));
             }
         }
     }
@@ -176,7 +178,7 @@ impl InputPanel {
 /// With egui, innermost panels should be added first ot the UI.
 #[derive(Default)]
 struct ResultsPanel {
-    results: Vec<String>,
+    results: Vec<Result>,
 }
 
 impl ResultsPanel {
@@ -190,16 +192,26 @@ impl ResultsPanel {
             .resizable(false)
             .show(ctx, |ui| {
                 self.results.iter().for_each(|result| {
-                    ui.add(
-                        Label::new(RichText::new(result).color(theme::RESULTS_TEXT_COLOR))
-                            .wrap_mode(TextWrapMode::Truncate),
-                    );
+                    ui.add(Self::build_label_from_result(result));
                 })
             });
     }
 
-    pub fn add_result(&mut self, result: String) {
+    pub fn add_result(&mut self, result: Result) {
         self.results.push(result);
+    }
+
+    fn build_label_from_result(result: &Result) -> Label {
+        let rich_text = match result {
+            Result::Value(content) => {
+                RichText::new(content.to_string()).color(theme::RESULTS_TEXT_COLOR)
+            }
+            Result::Error(content) => {
+                RichText::new(content.to_string()).color(theme::ERROR_TEXT_COLOR)
+            }
+        };
+
+        Label::new(rich_text).wrap_mode(TextWrapMode::Truncate)
     }
 
     fn build_frame() -> Frame {
@@ -207,4 +219,9 @@ impl ResultsPanel {
             .fill(theme::RESULTS_BG_COLOR)
             .inner_margin(theme::PANEL_MARGIN)
     }
+}
+
+enum Result {
+    Value(String),
+    Error(String),
 }
