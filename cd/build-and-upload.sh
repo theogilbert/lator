@@ -3,9 +3,7 @@
 # This script can be used to build a release version of the application and upload it as an asset of a Github release.
 #
 # Usage:
-#   build-and-upload.sh <version> <target>
-#
-# <target> must be either "linux" or "windows"
+#   build-and-upload.sh <version>
 #
 # Requirements:
 # - The GITHUB_TOKEN environment variable needs to be set.
