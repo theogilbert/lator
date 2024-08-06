@@ -1,6 +1,6 @@
 use std::fmt::Display;
 use std::num::ParseFloatError;
-use std::ops::{Add, Sub};
+use std::ops::{Add, Mul, Sub};
 
 use crate::engine::Error;
 
@@ -45,6 +45,16 @@ impl Sub for Number {
     }
 }
 
+impl Mul for Number {
+    type Output = Self;
+
+    fn mul(self, rhs: Self) -> Self::Output {
+        Number {
+            value: self.value * rhs.value,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::engine::number::Number;
@@ -67,5 +77,12 @@ mod tests {
         let lhs = Number::from_str("3.5").unwrap();
         let rhs = Number::from_str("1").unwrap();
         assert_eq!("2.5", (lhs - rhs).to_string());
+    }
+
+    #[test]
+    fn test_mul_number() {
+        let lhs = Number::from_str("3.5").unwrap();
+        let rhs = Number::from_str("3").unwrap();
+        assert_eq!("10.5", (lhs * rhs).to_string());
     }
 }

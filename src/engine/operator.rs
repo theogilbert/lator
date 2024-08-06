@@ -2,4 +2,5 @@
 pub enum OperatorType {
     Addition,
     Subtraction,
+    Multiplication,
 }

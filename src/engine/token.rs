@@ -87,6 +87,10 @@ lazy_static! {
             TokenType::Operator(OperatorType::Subtraction),
             Regex::new(r"-").unwrap()
         ),
+        (
+            TokenType::Operator(OperatorType::Multiplication),
+            Regex::new(r"×").unwrap()
+        ),
     ]);
 }
 
@@ -179,6 +183,7 @@ mod tests {
     #[rstest]
     #[case("+", OperatorType::Addition)]
     #[case("-", OperatorType::Subtraction)]
+    #[case("×", OperatorType::Multiplication)]
     fn should_evaluate_operator_as_valid_token(#[case] expr: &str, #[case] op_type: OperatorType) {
         assert_eq!(
             vec![str_to_token(expr, TokenType::Operator(op_type))],

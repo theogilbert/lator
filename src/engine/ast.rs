@@ -21,6 +21,7 @@ impl OperatorType {
         match self {
             OperatorType::Addition => lhs + rhs,
             OperatorType::Subtraction => lhs - rhs,
+            OperatorType::Multiplication => lhs * rhs,
         }
     }
 }
