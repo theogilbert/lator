@@ -3,10 +3,11 @@ use std::sync::Arc;
 use eframe::epaint::text::{TextFormat, TextWrapMode};
 use eframe::epaint::Margin;
 use egui::text::LayoutJob;
-use egui::RichText;
 use egui::{
-    CentralPanel, Context, Frame, Galley, Label, SidePanel, TextBuffer, TextEdit, TextStyle, Ui,
+    CentralPanel, Context, Frame, Galley, InputState, Label, SidePanel, TextBuffer, TextEdit,
+    TextStyle, Ui,
 };
+use egui::{Event, RichText};
 
 use crate::engine::{evaluate, Error};
 use crate::ui::theme;
@@ -86,6 +87,8 @@ enum HistorizedExpression {
 impl InputPanel {
     /// Displays the calculator's input panel, and returns an expression if the user submitted one.
     pub fn show(&mut self, ctx: &Context) -> Option<String> {
+        ctx.input_mut(Self::replace_symbols_in_input);
+
         let history_entries: Vec<_> = self
             .expr_history
             .iter()
@@ -101,6 +104,20 @@ impl InputPanel {
         input_result.inner
     }
 
+    fn replace_symbols_in_input(input: &mut InputState) {
+        for event in &mut input.events {
+            match event {
+                Event::Text(txt) => *event = Event::Text(Self::replace_symbols_in_text(txt)),
+                Event::Paste(txt) => *event = Event::Paste(Self::replace_symbols_in_text(txt)),
+                _ => {}
+            }
+        }
+    }
+
+    fn replace_symbols_in_text(text: &str) -> String {
+        text.replace("*", "×")
+    }
+
     fn show_and_ret_submitted_expr(
         &mut self,
         ui: &mut Ui,
@@ -113,8 +130,10 @@ impl InputPanel {
         let expr_edit = self.build_expr_text_edit();
         let edit_result = ui.add(expr_edit);
 
-        let expr_submitted = edit_result.lost_focus() && !self.expression.is_empty();
-        let submission = expr_submitted.then(|| self.expression.take());
+        let mut submission = None;
+        if edit_result.lost_focus() && !self.expression.is_empty() {
+            submission = Some(self.expression.take());
+        }
 
         edit_result.request_focus();
         submission
