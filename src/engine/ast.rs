@@ -1,6 +1,16 @@
 use crate::engine::number::Number;
 use crate::engine::operator::OperatorType;
 
+/// An AST (Abstract Syntax Tree) represents a mathematical expression in the form of a tree.
+///
+/// For example, the expression 1+2*3 is represented as:
+/// ```text
+///    +
+///  /   \
+/// 1     *
+///     /   \
+///    2     3
+/// ```
 #[derive(Debug, PartialEq)]
 pub enum Ast {
     Number(Number),
