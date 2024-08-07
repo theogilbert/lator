@@ -4,11 +4,31 @@ use crate::engine::operator::OperatorType;
 use crate::engine::token::{Token, TokenType};
 use crate::engine::Error;
 
+/// Parses a sequence of tokens into an AST.\
+/// Returns an error if the sequence is invalid (e.g. two Number tokens next to each others).\
+/// An empty sequence is considered as invalid.
 pub fn parse(tokens: &[Token]) -> Result<Ast, Error> {
-    build_naive_tree(tokens)
+    let ast = build_naive_tree(tokens)?;
+    Ok(prioritize_operators(ast))
 }
 
-// This function builds a naive AST in that it does not care about priority of operators.
+/// This function builds a naive AST that does not care about priority of operators.
+/// The AST will always be left-aligned, meaning that the tree always develops through the left
+/// branch of operator nodes.
+///
+/// For example, the expression 1+2+3+4 will be represented as:
+/// ```text
+///          +
+///        /  \
+///       +    4
+///     /  \
+///    +    3
+///  /  \
+/// 1    2
+/// ```
+///
+/// This property is important as it allows us to later re-arrange the tree to respect the priority
+/// of different operators.
 fn build_naive_tree(tokens: &[Token]) -> Result<Ast, Error> {
     if tokens.is_empty() {
         return Err(Error::EmptyExpression());
@@ -69,11 +89,48 @@ impl ParsingContext {
     }
 }
 
+/// Re-arrange a naive AST to make sure that operators with higher priority are evaluated first.\
+/// As an AST is evaluated from the bottom up, this means that unless parenthesis are involved,
+/// higher priority operators should end up deeper in the tree than lower priority ancestor
+/// operators.
+fn prioritize_operators(naive_tree: Ast) -> Ast {
+    match naive_tree {
+        Ast::Number(_) => naive_tree,
+        Ast::Operator(kind, lhs, rhs) => {
+            // As documented in build_naive_tree, a naive tree should be left-aligned.
+            // The right child should only be populated by number nodes.
+            assert!(
+                matches!(*rhs, Ast::Number(_)),
+                "rhs of naive tree node is not a number: {:?}",
+                *rhs
+            );
+
+            let left_ast = prioritize_operators(*lhs);
+            match left_ast {
+                Ast::Number(_) => Ast::Operator(kind, Box::new(left_ast), rhs),
+                Ast::Operator(child_kind, child_lhs, child_rhs) => {
+                    if kind.priority() > child_kind.priority() {
+                        // Parent operator has higher priority than child operator.
+                        // Parent operator should be applied first, and thus should be lower in
+                        // the tree hierarchy.
+                        let new_child = Ast::Operator(kind, child_rhs, rhs);
+                        Ast::Operator(child_kind, child_lhs, Box::new(new_child))
+                    } else {
+                        let old_child = Ast::Operator(child_kind, child_lhs, child_rhs);
+                        Ast::Operator(kind, Box::new(old_child), rhs)
+                    }
+                }
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::engine::ast::test_helpers::*;
     use crate::engine::operator::OperatorType;
-    use crate::engine::parser::parse;
+    use crate::engine::parser::{parse, prioritize_operators};
+    use crate::engine::token::test_helpers::{add_token, num_token};
     use crate::engine::token::{Token, TokenType};
     use crate::engine::Error;
 
@@ -81,18 +138,14 @@ mod tests {
 
     #[test]
     fn test_parsing_one_number_token_should_produce_number_node() {
-        let token = Token::new(TokenType::Number, "49", 0);
+        let token = num_token("49", 0);
         let result = parse(&[token]).unwrap();
         assert_eq!(num_node("49"), result);
     }
 
     #[test]
     fn test_parsing_addition_token_sequence_should_produce_add_node() {
-        let tokens = [
-            Token::new(TokenType::Number, "49", 0),
-            Token::new(ADD_TOKEN_TYPE, "+", 0),
-            Token::new(TokenType::Number, "1.5", 3),
-        ];
+        let tokens = [num_token("49", 0), add_token(2), num_token("1.5", 3)];
 
         let expected_tree = add_node(num_node("49"), num_node("1.5"));
         assert_eq!(expected_tree, parse(&tokens).unwrap());
@@ -114,39 +167,65 @@ mod tests {
 
     #[test]
     fn test_parsing_sequence_with_only_operator_and_no_lhs_should_fail() {
-        let seq = [
-            Token::new(ADD_TOKEN_TYPE, "+", 0),
-            Token::new(TokenType::Number, "2", 1),
-        ];
+        let seq = [add_token(0), num_token("2", 1)];
         assert_eq!(Err(Error::InvalidExpression(0)), parse(&seq));
     }
 
     #[test]
     fn test_parsing_sequence_with_adjacent_numbers_should_fail() {
-        let seq = [
-            Token::new(TokenType::Number, "1", 0),
-            Token::new(TokenType::Number, "2", 1),
-        ];
+        let seq = [num_token("1", 0), num_token("2", 1)];
         assert_eq!(Err(Error::InvalidExpression(1)), parse(&seq));
     }
 
     #[test]
     fn test_parsing_sequence_with_adjacent_operators_should_fail() {
         let seq = [
-            Token::new(TokenType::Number, "1", 0),
-            Token::new(ADD_TOKEN_TYPE, "+", 1),
-            Token::new(ADD_TOKEN_TYPE, "+", 2),
-            Token::new(TokenType::Number, "2", 3),
+            num_token("1", 0),
+            add_token(1),
+            add_token(2),
+            num_token("2", 3),
         ];
         assert_eq!(Err(Error::InvalidExpression(2)), parse(&seq));
     }
 
     #[test]
     fn test_parsing_sequence_with_final_operator_should_fail() {
-        let seq = [
-            Token::new(TokenType::Number, "1", 0),
-            Token::new(ADD_TOKEN_TYPE, "+", 1),
-        ];
+        let seq = [num_token("1", 0), add_token(1)];
         assert_eq!(Err(Error::InvalidExpression(1)), parse(&seq));
+    }
+
+    #[test]
+    fn test_naive_tree_should_always_develop_through_left_branch() {
+        let tokens = [
+            num_token("1", 0),
+            add_token(1),
+            num_token("2", 2),
+            add_token(3),
+            num_token("3", 4),
+            add_token(5),
+            num_token("4", 6),
+        ];
+
+        let expected_tree = add_node(
+            add_node(add_node(num_node("1"), num_node("2")), num_node("3")),
+            num_node("4"),
+        );
+        assert_eq!(expected_tree, parse(&tokens).unwrap());
+    }
+
+    #[test]
+    fn should_prioritize_multi_level_naive_tree_using_operator_priority() {
+        // At first the expression 1+2*3+4 will be naively parsed as ((1+2)*3)+4
+        let naive_ast = add_node(
+            mul_node(add_node(num_node("1"), num_node("2")), num_node("3")),
+            num_node("4"),
+        );
+        // Once sorted, the AST should be transformed to (1+(2*3))+4 to run the multiplication first
+        let sorted_ast = add_node(
+            add_node(num_node("1"), mul_node(num_node("2"), num_node("3"))),
+            num_node("4"),
+        );
+
+        assert_eq!(sorted_ast, prioritize_operators(naive_ast));
     }
 }

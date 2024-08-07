@@ -34,6 +34,16 @@ impl OperatorType {
             OperatorType::Multiplication => lhs * rhs,
         }
     }
+
+    /// Indicates the priority of an operator.\
+    /// A higher value means a higher priority.
+    pub fn priority(&self) -> usize {
+        match self {
+            OperatorType::Addition => 0,
+            OperatorType::Subtraction => 0,
+            OperatorType::Multiplication => 1,
+        }
+    }
 }
 
 #[cfg(test)]
