@@ -120,8 +120,10 @@ fn prioritize_operators(naive_tree: Ast) -> Ast {
                         Ast::Operator(kind, Box::new(old_child), rhs)
                     }
                 }
+                Ast::Negative(_) => unimplemented!(),
             }
         }
+        Ast::Negative(_) => unimplemented!(),
     }
 }
 

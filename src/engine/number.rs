@@ -1,6 +1,6 @@
 use std::fmt::Display;
 use std::num::ParseFloatError;
-use std::ops::{Add, Mul, Sub};
+use std::ops::{Add, Mul, Neg, Sub};
 
 use crate::engine::Error;
 
@@ -55,6 +55,14 @@ impl Mul for Number {
     }
 }
 
+impl Neg for Number {
+    type Output = Self;
+
+    fn neg(self) -> Self::Output {
+        Number { value: -self.value }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::engine::number::Number;
@@ -84,5 +92,11 @@ mod tests {
         let lhs = Number::from_str("3.5").unwrap();
         let rhs = Number::from_str("3").unwrap();
         assert_eq!("10.5", (lhs * rhs).to_string());
+    }
+
+    #[test]
+    fn test_negate_number() {
+        let num = Number::from_str("3.5").unwrap();
+        assert_eq!("-3.5", (-num).to_string());
     }
 }
