@@ -60,6 +60,9 @@ mod tests {
     #[case("18+1.48", "19.48")]
     #[case(" 1+\t2+    3+4 ", "10")]
     #[case("1+2-4", "-1")]
+    #[case("1+2×4", "9")]
+    #[case("13×24-54-52-45×37×90+63", "-149581")]
+    #[case("91×59×41×88×21+69+67×8", "406798997")]
     fn test_should_evaluate_valid_expressions(#[case] num_repr: &str, #[case] result: &str) {
         assert_eq!(evaluate(num_repr), Ok(result.into()));
     }

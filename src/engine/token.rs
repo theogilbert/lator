@@ -87,6 +87,10 @@ lazy_static! {
             TokenType::Operator(OperatorType::Subtraction),
             Regex::new(r"-").unwrap()
         ),
+        (
+            TokenType::Operator(OperatorType::Multiplication),
+            Regex::new(r"×").unwrap()
+        ),
     ]);
 }
 
@@ -138,6 +142,7 @@ fn build_token_matching_pattern<'a>(
 
 #[cfg(test)]
 mod tests {
+    use crate::engine::token::test_helpers::{add_token, invalid_token, num_token};
     use rstest::rstest;
 
     use super::*;
@@ -168,10 +173,7 @@ mod tests {
     fn should_evaluate_number_with_two_decimal_separators_as_two_tokens() {
         let expr = "123.45.67";
         assert_eq!(
-            vec![
-                Token::new(TokenType::Number, "123.45", 0),
-                Token::new(TokenType::Number, ".67", 6)
-            ],
+            vec![num_token("123.45", 0), num_token(".67", 6)],
             tokenize(expr)
         );
     }
@@ -179,6 +181,7 @@ mod tests {
     #[rstest]
     #[case("+", OperatorType::Addition)]
     #[case("-", OperatorType::Subtraction)]
+    #[case("×", OperatorType::Multiplication)]
     fn should_evaluate_operator_as_valid_token(#[case] expr: &str, #[case] op_type: OperatorType) {
         assert_eq!(
             vec![str_to_token(expr, TokenType::Operator(op_type))],
@@ -187,12 +190,9 @@ mod tests {
     }
 
     #[rstest]
-    #[case("123abc", vec![Token::new(TokenType::Number, "123", 0), Token::new(TokenType::Invalid, "abc", 3)])]
-    #[case("abc123", vec![Token::new(TokenType::Invalid, "abc", 0), Token::new(TokenType::Number, "123", 3)])]
-    #[case("123+.456", vec![Token::new(TokenType::Number, "123", 0),
-                            Token::new(TokenType::Operator(OperatorType::Addition), "+" , 3),
-                            Token::new(TokenType::Number, ".456", 4)
-    ])]
+    #[case("123abc", vec![num_token("123", 0), invalid_token("abc", 3)])]
+    #[case("abc123", vec![invalid_token("abc", 0), num_token("123", 3)])]
+    #[case("123+.456", vec![num_token("123", 0), add_token(3), num_token(".456", 4)])]
     fn should_evaluate_expression_as_sequence(#[case] expr: &str, #[case] tokens: Vec<Token>) {
         assert_eq!(tokens, tokenize(expr));
     }
@@ -200,15 +200,31 @@ mod tests {
     #[test]
     fn should_ignore_white_spaces() {
         let expr = " 1   + \t\t\t   \x0a2 ";
-        let expected_sequence = vec![
-            Token::new(TokenType::Number, "1", 1),
-            Token::new(TokenType::Operator(OperatorType::Addition), "+", 5),
-            Token::new(TokenType::Number, "2", 14),
-        ];
+        let expected_sequence = vec![num_token("1", 1), add_token(5), num_token("2", 14)];
         assert_eq!(expected_sequence, tokenize(expr));
     }
 
     fn str_to_token(expr: &str, token_type: TokenType) -> Token {
         Token::new(token_type, expr, 0)
+    }
+}
+
+#[cfg(test)]
+pub mod test_helpers {
+    use crate::engine::operator::OperatorType;
+    use crate::engine::token::{Token, TokenType};
+
+    const ADD_CHAR: &'static str = "+";
+
+    pub fn invalid_token(content: &str, start: usize) -> Token {
+        Token::new(TokenType::Invalid, content, start)
+    }
+
+    pub fn num_token(content: &str, start: usize) -> Token {
+        Token::new(TokenType::Number, content, start)
+    }
+
+    pub fn add_token(start: usize) -> Token<'static> {
+        Token::new(TokenType::Operator(OperatorType::Addition), ADD_CHAR, start)
     }
 }
