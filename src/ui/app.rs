@@ -56,13 +56,6 @@ impl LatorApp {
                 self.results_panel
                     .add_result(Result::Error("invalid expression".into()));
             }
-            Err(unexpected) => {
-                eprintln!("Unexpected expression evaluation error: {:?}", unexpected);
-                self.input_panel
-                    .add_history(HistorizedExpression::Invalid(expr, 0));
-                self.results_panel
-                    .add_result(Result::Error("unexpected error".into()));
-            }
         }
     }
 }

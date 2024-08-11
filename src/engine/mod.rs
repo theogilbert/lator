@@ -16,8 +16,6 @@ pub enum Error {
     /// such expressions.
     #[error("empty expression")]
     EmptyExpression(),
-    #[error("number expression {0} has an invalid format: {1}")]
-    InvalidNumberExpr(String, String),
     /// Indicates that an expression is invalid.
     /// This error variant contains a field indicating from which position the expression
     /// becomes invalid.

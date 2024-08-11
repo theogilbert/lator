@@ -1,8 +1,5 @@
 use std::fmt::Display;
-use std::num::ParseFloatError;
 use std::ops::{Add, Mul, Neg, Sub};
-
-use crate::engine::Error;
 
 /// A wrapper around a decimal number.
 #[derive(Copy, Clone, Debug, Default, PartialEq)]
@@ -11,10 +8,8 @@ pub struct Number {
 }
 
 impl Number {
-    pub fn from_str(decimal_repr: &str) -> Result<Self, Error> {
-        let value = decimal_repr.parse().map_err(|pre: ParseFloatError| {
-            Error::InvalidNumberExpr(decimal_repr.to_string(), pre.to_string())
-        })?;
+    pub fn from_str(decimal_repr: &str) -> Result<Self, ()> {
+        let value = decimal_repr.parse().map_err(|_| ())?;
         Ok(Number { value })
     }
 }

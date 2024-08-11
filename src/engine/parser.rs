@@ -34,7 +34,9 @@ fn build_naive_tree(tokens: &[Token]) -> Result<Ast, Error> {
     let mut parsing_context = ParsingContext::Empty;
 
     for token in tokens.iter() {
-        parsing_context = parsing_context.update_from_next_token(token, cursor)?;
+        parsing_context = parsing_context
+            .update_from_next_token(token)
+            .map_err(|_| Error::InvalidExpression(cursor))?;
         cursor += token.length();
     }
 
@@ -49,7 +51,8 @@ fn build_naive_tree(tokens: &[Token]) -> Result<Ast, Error> {
     }
 }
 
-/// This class represents the state of the parser while parsing an AST.
+/// This class represents the state of the parser while transforming a sequence of tokens
+/// into an AST.
 enum ParsingContext {
     /// No tokens have been parsed yet. This is the initial state of the context.
     Empty,
@@ -65,16 +68,16 @@ enum ParsingContext {
 }
 
 impl ParsingContext {
-    fn update_from_next_token(self, token: &Token, token_pos: usize) -> Result<Self, Error> {
+    fn update_from_next_token(self, token: &Token) -> Result<Self, ()> {
         match token.token_type() {
-            TokenType::Invalid => Err(Error::InvalidExpression(token_pos)),
+            TokenType::Invalid => Err(()),
             TokenType::Whitespace => Ok(self),
             TokenType::Number => {
                 let current_node = Ast::Number(Number::from_str(token.content())?);
 
                 match self {
                     Self::Empty => Ok(Self::Value(current_node)),
-                    Self::Value(_) => Err(Error::InvalidExpression(token_pos)),
+                    Self::Value(_) => Err(()),
                     Self::PendingOperation(lhs, op_type) => {
                         let ope = Ast::Operator(op_type, Box::new(lhs), Box::new(current_node));
                         Ok(Self::Value(ope))
@@ -83,7 +86,7 @@ impl ParsingContext {
             }
             TokenType::Operator(ope_type) => match self {
                 ParsingContext::Value(lhs) => Ok(Self::PendingOperation(lhs, ope_type)),
-                _ => Err(Error::InvalidExpression(token_pos)),
+                _ => Err(()),
             },
         }
     }
