@@ -1,8 +1,8 @@
-use std::fmt::Display;
+use std::fmt::{Debug, Display, Formatter};
 use std::ops::{Add, Mul, Neg, Sub};
 
 /// A wrapper around a decimal number.
-#[derive(Copy, Clone, Debug, Default, PartialEq)]
+#[derive(Copy, Clone, Default, PartialEq)]
 pub struct Number {
     value: f64,
 }
@@ -18,8 +18,14 @@ impl Number {
     }
 }
 
+impl Debug for Number {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.value)
+    }
+}
+
 impl Display for Number {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.value)
     }
 }

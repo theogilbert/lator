@@ -47,7 +47,8 @@ mod tests {
     #[rstest]
     #[case("invalid")]
     #[case("1+")]
-    #[case("1++1")]
+    #[case("1+*1")]
+    #[case("1**1")]
     fn test_should_fail_when_expression_is_invalid(#[case] expr: &str) {
         assert!(matches!(evaluate(expr), Err(Error::InvalidExpression(_))));
     }
@@ -60,14 +61,28 @@ mod tests {
     }
 
     #[rstest]
+    #[case("1+-2", "-1")]
+    #[case("1++1", "2")]
+    #[case("1×-2", "-2")]
+    #[case("1---2", "-1")]
+    #[case("1----2", "3")]
+    fn test_should_evaluate_consecutive_negative_and_positive_signs(
+        #[case] expr: &str,
+        #[case] result: &str,
+    ) {
+        assert_eq!(evaluate(expr), Ok(result.into()));
+    }
+
+    #[rstest]
     #[case("123", "123")]
     #[case("18+1.48", "19.48")]
     #[case(" 1+\t2+    3+4 ", "10")]
     #[case("1+2-4", "-1")]
-    #[case("1+2×4", "9")]
+    #[case("1+2×4.5", "10")]
     #[case("13×24-54-52-45×37×90+63", "-149581")]
     #[case("91×59×41×88×21+69+67×8", "406798997")]
-    fn test_should_evaluate_valid_expressions(#[case] num_repr: &str, #[case] result: &str) {
-        assert_eq!(evaluate(num_repr), Ok(result.into()));
+    #[case("1+2×-3", "-5")]
+    fn test_should_evaluate_valid_expressions(#[case] expr: &str, #[case] result: &str) {
+        assert_eq!(evaluate(expr), Ok(result.into()));
     }
 }

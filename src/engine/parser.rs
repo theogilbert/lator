@@ -1,6 +1,6 @@
 use crate::engine::ast::Ast;
 use crate::engine::number::Number;
-use crate::engine::operator::OperatorType;
+use crate::engine::operator::{OperatorType, Sign};
 use crate::engine::token::{Token, TokenType};
 use crate::engine::Error;
 
@@ -62,16 +62,18 @@ enum ParsingContext {
     /// an operation sign.
     /// 1. The first field of this variant is the left hand side value.
     /// 2. The second field indicates the operation to perform on this value.
+    /// 3. The third field indicates if a negative sign should be applied
+    ///     to the right hand side value.
     ///
     /// The operation will be complete when the right hand side value is parsed.
-    PendingOperation(Ast, OperatorType),
+    PendingOperation(Ast, OperatorType, bool),
 }
 
 impl ParsingContext {
     fn update_from_next_token(self, token: &Token) -> Result<Self, ()> {
         match token.token_type() {
             TokenType::Invalid => Err(()),
-            TokenType::Whitespace => Ok(self),
+            TokenType::Whitespace => Ok(self), // Whitespaces do not affect the parsing context.
             TokenType::Number => self.update_from_number(token.content()),
             TokenType::Operator(op_type) => self.update_from_operator(op_type),
         }
@@ -80,31 +82,42 @@ impl ParsingContext {
     fn update_from_number(self, num_text: &str) -> Result<ParsingContext, ()> {
         let num_node = Ast::Number(Number::from_str(num_text)?);
 
-        let resolvable_node: Ast = match self {
-            Self::Empty => Ok(num_node),
-            Self::Value(_) => Err(()),
-            Self::PendingOperation(lhs, op_type) => {
-                Ok(Ast::Operator(op_type, Box::new(lhs), Box::new(num_node)))
-            }
-        }?;
+        let resolvable_node: Ast =
+            match self {
+                Self::Empty => Ok(num_node),
+                Self::Value(_) => Err(()),
+                Self::PendingOperation(lhs, op_type, negative_rhs) => Ok(
+                    Self::build_operation_node(lhs, op_type, negative_rhs, num_node),
+                ),
+            }?;
 
         Ok(Self::Value(resolvable_node))
     }
 
-    fn update_from_operator(self, op_type: OperatorType) -> Result<ParsingContext, ()> {
-        match self {
-            Self::Empty => {
-                let zero_node = Ast::Number(Number::zero());
-                match &op_type {
-                    OperatorType::Subtraction | OperatorType::Addition => {
-                        Ok(Self::PendingOperation(zero_node, op_type))
-                    }
-                    _ => Err(()),
-                }
-            }
-            Self::Value(lhs) => Ok(Self::PendingOperation(lhs, op_type)),
-            _ => Err(()),
+    fn build_operation_node(lhs: Ast, op_type: OperatorType, neg_rhs: bool, num_node: Ast) -> Ast {
+        let mut rhs = Box::new(num_node);
+
+        if neg_rhs {
+            rhs = Box::new(Ast::Negative(rhs));
         }
+
+        Ast::Operator(op_type, Box::new(lhs), rhs)
+    }
+
+    fn update_from_operator(self, new_operator: OperatorType) -> Result<ParsingContext, ()> {
+        match self {
+            Self::Empty => Self::init_context_from_operator(new_operator),
+            Self::Value(lhs) => Ok(Self::PendingOperation(lhs, new_operator, false)),
+            Self::PendingOperation(lhs, op_type, negative_rhs) => {
+                let negative_sign = negative_rhs ^ Sign::from_operator(new_operator)?.is_negative();
+                Ok(Self::PendingOperation(lhs, op_type, negative_sign))
+            }
+        }
+    }
+
+    fn init_context_from_operator(op_type: OperatorType) -> Result<ParsingContext, ()> {
+        let zero_node = Ast::Number(Number::zero());
+        Ok(Self::PendingOperation(zero_node, op_type, false))
     }
 }
 
@@ -119,7 +132,7 @@ fn prioritize_operators(naive_tree: Ast) -> Ast {
             // As documented in build_naive_tree, a naive tree should be left-aligned.
             // The right child should only be populated by number nodes.
             assert!(
-                matches!(*rhs, Ast::Number(_)),
+                matches!(*rhs, Ast::Number(_)) || matches!(*rhs, Ast::Negative(_)),
                 "rhs of naive tree node is not a number: {:?}",
                 *rhs
             );
@@ -150,7 +163,7 @@ fn prioritize_operators(naive_tree: Ast) -> Ast {
 mod tests {
     use crate::engine::ast::test_helpers::*;
     use crate::engine::parser::{parse, prioritize_operators};
-    use crate::engine::token::test_helpers::{add_token, num_token, sub_token};
+    use crate::engine::token::test_helpers::{add_token, mul_token, num_token, sub_token};
     use crate::engine::Error;
 
     #[test]
@@ -181,6 +194,37 @@ mod tests {
     }
 
     #[test]
+    fn test_positive_sign_following_operator_should_be_ignored() {
+        let tokens = [num_token("1"), mul_token(), add_token(), num_token("2")];
+        let expected_tree = mul_node(num_node("1"), num_node("2"));
+
+        assert_eq!(Ok(expected_tree), parse(&tokens));
+    }
+
+    #[test]
+    fn test_negative_sign_following_operator_should_turn_rhs_to_negative() {
+        let tokens = [num_token("1"), mul_token(), sub_token(), num_token("2")];
+        let expected_tree = mul_node(num_node("1"), neg_node(num_node("2")));
+
+        assert_eq!(Ok(expected_tree), parse(&tokens));
+    }
+
+    #[test]
+    fn test_pair_number_of_negative_sign_following_operator_should_turn_rhs_to_positive() {
+        let tokens = [
+            num_token("1"),
+            mul_token(),
+            sub_token(),
+            add_token(),
+            sub_token(),
+            num_token("2"),
+        ];
+        let expected_tree = mul_node(num_node("1"), num_node("2"));
+
+        assert_eq!(Ok(expected_tree), parse(&tokens));
+    }
+
+    #[test]
     fn test_parsing_addition_token_sequence_should_produce_add_node() {
         let tokens = [num_token("49"), add_token(), num_token("1.5")];
 
@@ -197,12 +241,6 @@ mod tests {
     fn test_parsing_sequence_with_adjacent_numbers_should_fail() {
         let seq = [num_token("1"), num_token("2")];
         assert_eq!(Err(Error::InvalidExpression(1)), parse(&seq));
-    }
-
-    #[test]
-    fn test_parsing_sequence_with_adjacent_operators_should_fail() {
-        let seq = [num_token("1"), add_token(), add_token(), num_token("2")];
-        assert_eq!(Err(Error::InvalidExpression(2)), parse(&seq));
     }
 
     #[test]
