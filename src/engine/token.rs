@@ -10,6 +10,8 @@ use crate::engine::operator::OperatorType;
 pub enum TokenType {
     /// Represents an invalid sequence of characters.
     Invalid,
+    /// Represents a sequence of whitespace characters.
+    Whitespace,
     /// Classifies a token as either an integer or a decimal numeral.
     Number,
     /// Classifies a token as a '+' sign operator.
@@ -19,27 +21,20 @@ pub enum TokenType {
 #[derive(Eq, PartialEq, Debug, Copy, Clone)]
 pub struct Token<'a> {
     token_type: TokenType,
-    // The position of the first character of the token in the original expression
-    start: usize,
     // The content of the token
     content: &'a str,
 }
 
 impl<'a> Token<'a> {
-    pub fn new(token_type: TokenType, content: &'a str, start: usize) -> Self {
+    pub fn new(token_type: TokenType, content: &'a str) -> Self {
         Self {
             token_type,
-            start,
             content,
         }
     }
 
     pub fn token_type(&self) -> TokenType {
         self.token_type
-    }
-
-    pub fn start(&self) -> usize {
-        self.start
     }
 
     pub fn length(&self) -> usize {
@@ -59,11 +54,7 @@ pub fn tokenize(expression: &str) -> Vec<Token> {
     let mut cursor = 0;
 
     while cursor < expression.len() {
-        cursor += measure_leading_whitespace(&expression[cursor..]);
-        if cursor >= expression.len() {
-            break;
-        }
-        let next_token = produce_next_token(&expression[cursor..], cursor);
+        let next_token = produce_next_token(&expression[cursor..]);
         cursor += next_token.length();
         tokens.push(next_token);
     }
@@ -72,9 +63,12 @@ pub fn tokenize(expression: &str) -> Vec<Token> {
 }
 
 lazy_static! {
-    static ref WHITESPACE_PATTERN: Regex = Regex::new(r"^\s+").unwrap();
     /// TOKEN_PATTERNS represent the list of tokens parseable from the parser.
     static ref TOKEN_PATTERNS: HashMap<TokenType, Regex> = HashMap::from([
+        (
+            TokenType::Whitespace,
+            Regex::new(r"^\s+").unwrap()
+        ),
         (
             TokenType::Number,
             Regex::new(r"(\d+(\.\d*)?)|^(\.\d+)").unwrap()
@@ -94,55 +88,51 @@ lazy_static! {
     ]);
 }
 
-/// Returns the length of an eventual leading whitespace in the given expression.
-fn measure_leading_whitespace(expr: &str) -> usize {
-    let whitespace_prefix_match = WHITESPACE_PATTERN.find(expr);
-    whitespace_prefix_match.map(|m| m.len()).unwrap_or(0)
-}
-
 /// Produce a token starting from the start of the given expression.\
 /// If the start of the expression matches no token pattern, an [invalid token](TokenType::Invalid)
 /// is produced. This token ends before the position of the next valid token.
-fn produce_next_token(expr: &str, cursor: usize) -> Token {
-    let mut tokens: Vec<Token> = TOKEN_PATTERNS
+fn produce_next_token(expr: &str) -> Token {
+    let mut tokens_and_pos: Vec<(Token, usize)> = TOKEN_PATTERNS
         .iter()
         .filter_map(|(token_type, pattern)| {
             build_token_matching_pattern(expr, *token_type, pattern)
         })
         .collect();
 
-    tokens.sort_by_key(|token| token.start);
+    tokens_and_pos.sort_by_key(|(_, pos)| *pos);
+    let first_token = tokens_and_pos.into_iter().next();
 
-    let next_token_opt = tokens.first();
-
-    if let Some(next_token) = next_token_opt {
-        if next_token.start == 0 {
-            // We re-create the token to change its start position to `cursor`
-            Token::new(next_token.token_type, next_token.content, cursor)
+    if let Some((token, start)) = first_token {
+        if start == 0 {
+            token
         } else {
-            Token::new(TokenType::Invalid, &expr[..next_token.start], cursor)
+            Token::new(TokenType::Invalid, &expr[..start])
         }
     } else {
-        Token::new(TokenType::Invalid, expr, cursor)
+        Token::new(TokenType::Invalid, expr)
     }
 }
 
-/// Produces the first [`Token`] in the expression which matches the given Regex pattern.
+/// Produces a tuple containing:
+/// 1. The first [`Token`] in the expression matching the given regex pattern.
+/// 2. The starting position of this token in the expression.
 ///
 /// Returns [`None`] if the expression contains no such token.
 fn build_token_matching_pattern<'a>(
     expr: &'a str,
     token_type: TokenType,
     pattern: &Regex,
-) -> Option<Token<'a>> {
+) -> Option<(Token<'a>, usize)> {
     pattern
         .find(expr)
-        .map(|re_match| Token::new(token_type, re_match.as_str(), re_match.start()))
+        .map(|re_match| (Token::new(token_type, re_match.as_str()), re_match.start()))
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::engine::token::test_helpers::{add_token, invalid_token, num_token};
+    use crate::engine::token::test_helpers::{
+        add_token, invalid_token, num_token, whitespace_token,
+    };
     use rstest::rstest;
 
     use super::*;
@@ -172,10 +162,7 @@ mod tests {
     #[test]
     fn should_evaluate_number_with_two_decimal_separators_as_two_tokens() {
         let expr = "123.45.67";
-        assert_eq!(
-            vec![num_token("123.45", 0), num_token(".67", 6)],
-            tokenize(expr)
-        );
+        assert_eq!(vec![num_token("123.45"), num_token(".67")], tokenize(expr));
     }
 
     #[rstest]
@@ -190,22 +177,30 @@ mod tests {
     }
 
     #[rstest]
-    #[case("123abc", vec![num_token("123", 0), invalid_token("abc", 3)])]
-    #[case("abc123", vec![invalid_token("abc", 0), num_token("123", 3)])]
-    #[case("123+.456", vec![num_token("123", 0), add_token(3), num_token(".456", 4)])]
+    #[case("123abc", vec![num_token("123"), invalid_token("abc")])]
+    #[case("abc123", vec![invalid_token("abc"), num_token("123")])]
+    #[case("123+.456", vec![num_token("123"), add_token(), num_token(".456")])]
     fn should_evaluate_expression_as_sequence(#[case] expr: &str, #[case] tokens: Vec<Token>) {
         assert_eq!(tokens, tokenize(expr));
     }
 
     #[test]
-    fn should_ignore_white_spaces() {
+    fn should_extract_whitespace_tokens() {
         let expr = " 1   + \t\t\t   \x0a2 ";
-        let expected_sequence = vec![num_token("1", 1), add_token(5), num_token("2", 14)];
+        let expected_sequence = vec![
+            whitespace_token(" "),
+            num_token("1"),
+            whitespace_token("   "),
+            add_token(),
+            whitespace_token(" \t\t\t   \x0a"),
+            num_token("2"),
+            whitespace_token(" "),
+        ];
         assert_eq!(expected_sequence, tokenize(expr));
     }
 
     fn str_to_token(expr: &str, token_type: TokenType) -> Token {
-        Token::new(token_type, expr, 0)
+        Token::new(token_type, expr)
     }
 }
 
@@ -216,15 +211,19 @@ pub mod test_helpers {
 
     const ADD_CHAR: &'static str = "+";
 
-    pub fn invalid_token(content: &str, start: usize) -> Token {
-        Token::new(TokenType::Invalid, content, start)
+    pub fn invalid_token(content: &str) -> Token {
+        Token::new(TokenType::Invalid, content)
     }
 
-    pub fn num_token(content: &str, start: usize) -> Token {
-        Token::new(TokenType::Number, content, start)
+    pub fn whitespace_token(content: &str) -> Token {
+        Token::new(TokenType::Whitespace, content)
     }
 
-    pub fn add_token(start: usize) -> Token<'static> {
-        Token::new(TokenType::Operator(OperatorType::Addition), ADD_CHAR, start)
+    pub fn num_token(content: &str) -> Token {
+        Token::new(TokenType::Number, content)
+    }
+
+    pub fn add_token() -> Token<'static> {
+        Token::new(TokenType::Operator(OperatorType::Addition), ADD_CHAR)
     }
 }

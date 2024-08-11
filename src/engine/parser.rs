@@ -30,23 +30,22 @@ pub fn parse(tokens: &[Token]) -> Result<Ast, Error> {
 /// This property is important as it allows us to later re-arrange the tree to respect the priority
 /// of different operators.
 fn build_naive_tree(tokens: &[Token]) -> Result<Ast, Error> {
-    if tokens.is_empty() {
-        return Err(Error::EmptyExpression());
-    }
-
+    let mut cursor: usize = 0;
     let mut parsing_context = ParsingContext::Empty;
 
     for token in tokens.iter() {
-        parsing_context = parsing_context.update_from_next_token(token)?;
+        parsing_context = parsing_context.update_from_next_token(token, cursor)?;
+        cursor += token.length();
     }
 
-    // unwrap() is safe as we checked that tokens is not empty
-    let last_token = tokens.last().unwrap();
-
-    if let ParsingContext::Value(ast) = parsing_context {
-        Ok(ast)
-    } else {
-        Err(Error::InvalidExpression(last_token.start()))
+    match parsing_context {
+        ParsingContext::Value(ast) => Ok(ast),
+        ParsingContext::Empty => Err(Error::EmptyExpression()),
+        ParsingContext::PendingOperation(_, _) => {
+            // unwrap() is safe as we know that the tokens array is not empty
+            let last_token = tokens.last().unwrap();
+            Err(Error::InvalidExpression(cursor - last_token.length()))
+        }
     }
 }
 
@@ -66,15 +65,16 @@ enum ParsingContext {
 }
 
 impl ParsingContext {
-    fn update_from_next_token(self, token: &Token) -> Result<Self, Error> {
+    fn update_from_next_token(self, token: &Token, token_pos: usize) -> Result<Self, Error> {
         match token.token_type() {
-            TokenType::Invalid => Err(Error::InvalidExpression(token.start())),
+            TokenType::Invalid => Err(Error::InvalidExpression(token_pos)),
+            TokenType::Whitespace => Ok(self),
             TokenType::Number => {
                 let current_node = Ast::Number(Number::from_str(token.content())?);
 
                 match self {
                     Self::Empty => Ok(Self::Value(current_node)),
-                    Self::Value(_) => Err(Error::InvalidExpression(token.start())),
+                    Self::Value(_) => Err(Error::InvalidExpression(token_pos)),
                     Self::PendingOperation(lhs, op_type) => {
                         let ope = Ast::Operator(op_type, Box::new(lhs), Box::new(current_node));
                         Ok(Self::Value(ope))
@@ -83,7 +83,7 @@ impl ParsingContext {
             }
             TokenType::Operator(ope_type) => match self {
                 ParsingContext::Value(lhs) => Ok(Self::PendingOperation(lhs, ope_type)),
-                _ => Err(Error::InvalidExpression(token.start())),
+                _ => Err(Error::InvalidExpression(token_pos)),
             },
         }
     }
@@ -128,24 +128,20 @@ fn prioritize_operators(naive_tree: Ast) -> Ast {
 #[cfg(test)]
 mod tests {
     use crate::engine::ast::test_helpers::*;
-    use crate::engine::operator::OperatorType;
     use crate::engine::parser::{parse, prioritize_operators};
     use crate::engine::token::test_helpers::{add_token, num_token};
-    use crate::engine::token::{Token, TokenType};
     use crate::engine::Error;
-
-    const ADD_TOKEN_TYPE: TokenType = TokenType::Operator(OperatorType::Addition);
 
     #[test]
     fn test_parsing_one_number_token_should_produce_number_node() {
-        let token = num_token("49", 0);
+        let token = num_token("49");
         let result = parse(&[token]).unwrap();
         assert_eq!(num_node("49"), result);
     }
 
     #[test]
     fn test_parsing_addition_token_sequence_should_produce_add_node() {
-        let tokens = [num_token("49", 0), add_token(2), num_token("1.5", 3)];
+        let tokens = [num_token("49"), add_token(), num_token("1.5")];
 
         let expected_tree = add_node(num_node("49"), num_node("1.5"));
         assert_eq!(expected_tree, parse(&tokens).unwrap());
@@ -159,51 +155,43 @@ mod tests {
 
     #[test]
     fn test_parsing_sequence_with_only_operator_should_fail() {
-        assert_eq!(
-            Err(Error::InvalidExpression(0)),
-            parse(&[Token::new(ADD_TOKEN_TYPE, "+", 0)])
-        );
+        assert_eq!(Err(Error::InvalidExpression(0)), parse(&[add_token()]));
     }
 
     #[test]
     fn test_parsing_sequence_with_only_operator_and_no_lhs_should_fail() {
-        let seq = [add_token(0), num_token("2", 1)];
+        let seq = [add_token(), num_token("2")];
         assert_eq!(Err(Error::InvalidExpression(0)), parse(&seq));
     }
 
     #[test]
     fn test_parsing_sequence_with_adjacent_numbers_should_fail() {
-        let seq = [num_token("1", 0), num_token("2", 1)];
+        let seq = [num_token("1"), num_token("2")];
         assert_eq!(Err(Error::InvalidExpression(1)), parse(&seq));
     }
 
     #[test]
     fn test_parsing_sequence_with_adjacent_operators_should_fail() {
-        let seq = [
-            num_token("1", 0),
-            add_token(1),
-            add_token(2),
-            num_token("2", 3),
-        ];
+        let seq = [num_token("1"), add_token(), add_token(), num_token("2")];
         assert_eq!(Err(Error::InvalidExpression(2)), parse(&seq));
     }
 
     #[test]
     fn test_parsing_sequence_with_final_operator_should_fail() {
-        let seq = [num_token("1", 0), add_token(1)];
+        let seq = [num_token("1"), add_token()];
         assert_eq!(Err(Error::InvalidExpression(1)), parse(&seq));
     }
 
     #[test]
     fn test_naive_tree_should_always_develop_through_left_branch() {
         let tokens = [
-            num_token("1", 0),
-            add_token(1),
-            num_token("2", 2),
-            add_token(3),
-            num_token("3", 4),
-            add_token(5),
-            num_token("4", 6),
+            num_token("1"),
+            add_token(),
+            num_token("2"),
+            add_token(),
+            num_token("3"),
+            add_token(),
+            num_token("4"),
         ];
 
         let expected_tree = add_node(
