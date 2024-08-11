@@ -43,7 +43,7 @@ fn build_naive_tree(tokens: &[Token]) -> Result<Ast, Error> {
     match parsing_context {
         ParsingContext::Value(ast) => Ok(ast),
         ParsingContext::Empty => Err(Error::EmptyExpression()),
-        ParsingContext::PendingOperation(_, _) => {
+        _ => {
             // unwrap() is safe as we know that the tokens array is not empty
             let last_token = tokens.last().unwrap();
             Err(Error::InvalidExpression(cursor - last_token.length()))
@@ -56,6 +56,9 @@ fn build_naive_tree(tokens: &[Token]) -> Result<Ast, Error> {
 enum ParsingContext {
     /// No tokens have been parsed yet. This is the initial state of the context.
     Empty,
+    /// The parsing context only contains a negative sign, which will be applied to the next valid
+    /// token to form an [Ast::Negative] node.
+    PendingNegative,
     /// The parsed tokens resolve to a computable value.
     Value(Ast),
     /// An operation is pending, meaning that the last token which has been parsed is
@@ -72,22 +75,34 @@ impl ParsingContext {
         match token.token_type() {
             TokenType::Invalid => Err(()),
             TokenType::Whitespace => Ok(self),
-            TokenType::Number => {
-                let current_node = Ast::Number(Number::from_str(token.content())?);
+            TokenType::Number => self.update_from_number(token.content()),
+            TokenType::Operator(op_type) => self.update_from_operator(op_type),
+        }
+    }
 
-                match self {
-                    Self::Empty => Ok(Self::Value(current_node)),
-                    Self::Value(_) => Err(()),
-                    Self::PendingOperation(lhs, op_type) => {
-                        let ope = Ast::Operator(op_type, Box::new(lhs), Box::new(current_node));
-                        Ok(Self::Value(ope))
-                    }
-                }
+    fn update_from_number(self, num_text: &str) -> Result<ParsingContext, ()> {
+        let num_node = Ast::Number(Number::from_str(num_text)?);
+
+        let resolvable_node: Ast = match self {
+            Self::Empty => Ok(num_node),
+            Self::Value(_) => Err(()),
+            Self::PendingOperation(lhs, op_type) => {
+                Ok(Ast::Operator(op_type, Box::new(lhs), Box::new(num_node)))
             }
-            TokenType::Operator(ope_type) => match self {
-                ParsingContext::Value(lhs) => Ok(Self::PendingOperation(lhs, ope_type)),
+            Self::PendingNegative => Ok(Ast::Negative(Box::new(num_node))),
+        }?;
+
+        Ok(Self::Value(resolvable_node))
+    }
+
+    fn update_from_operator(self, op_type: OperatorType) -> Result<ParsingContext, ()> {
+        match self {
+            Self::Empty => match op_type {
+                OperatorType::Subtraction => Ok(Self::PendingNegative),
                 _ => Err(()),
             },
+            Self::Value(lhs) => Ok(Self::PendingOperation(lhs, op_type)),
+            _ => Err(()),
         }
     }
 }
@@ -126,7 +141,7 @@ fn prioritize_operators(naive_tree: Ast) -> Ast {
                 Ast::Negative(_) => unimplemented!(),
             }
         }
-        Ast::Negative(_) => unimplemented!(),
+        Ast::Negative(child) => Ast::Negative(child),
     }
 }
 
@@ -134,14 +149,31 @@ fn prioritize_operators(naive_tree: Ast) -> Ast {
 mod tests {
     use crate::engine::ast::test_helpers::*;
     use crate::engine::parser::{parse, prioritize_operators};
-    use crate::engine::token::test_helpers::{add_token, num_token};
+    use crate::engine::token::test_helpers::{add_token, num_token, sub_token};
     use crate::engine::Error;
 
     #[test]
+    fn test_parsing_no_tokens_should_fail() {
+        assert_eq!(Err(Error::EmptyExpression()), parse(&[]));
+    }
+
+    #[test]
     fn test_parsing_one_number_token_should_produce_number_node() {
-        let token = num_token("49");
-        let result = parse(&[token]).unwrap();
-        assert_eq!(num_node("49"), result);
+        assert_eq!(Ok(num_node("49")), parse(&[num_token("49")]));
+    }
+
+    #[test]
+    fn test_parsing_negative_number_should_produce_value_node() {
+        let tokens = [sub_token(), num_token("1")];
+        let expected_tree = neg_node(num_node("1"));
+
+        assert_eq!(Ok(expected_tree), parse(&tokens));
+    }
+
+    #[test]
+    fn test_parsing_sequence_with_only_operator_and_no_lhs_should_fail() {
+        let seq = [add_token(), num_token("2")];
+        assert_eq!(Err(Error::InvalidExpression(0)), parse(&seq));
     }
 
     #[test]
@@ -149,24 +181,12 @@ mod tests {
         let tokens = [num_token("49"), add_token(), num_token("1.5")];
 
         let expected_tree = add_node(num_node("49"), num_node("1.5"));
-        assert_eq!(expected_tree, parse(&tokens).unwrap());
-    }
-
-    #[test]
-    fn test_parsing_no_tokens_should_fail() {
-        let result = parse(&[]);
-        assert_eq!(result.err().unwrap(), Error::EmptyExpression());
+        assert_eq!(Ok(expected_tree), parse(&tokens));
     }
 
     #[test]
     fn test_parsing_sequence_with_only_operator_should_fail() {
         assert_eq!(Err(Error::InvalidExpression(0)), parse(&[add_token()]));
-    }
-
-    #[test]
-    fn test_parsing_sequence_with_only_operator_and_no_lhs_should_fail() {
-        let seq = [add_token(), num_token("2")];
-        assert_eq!(Err(Error::InvalidExpression(0)), parse(&seq));
     }
 
     #[test]
@@ -182,7 +202,7 @@ mod tests {
     }
 
     #[test]
-    fn test_parsing_sequence_with_final_operator_should_fail() {
+    fn test_parsing_sequence_ending_with_operator_should_fail() {
         let seq = [num_token("1"), add_token()];
         assert_eq!(Err(Error::InvalidExpression(1)), parse(&seq));
     }
@@ -203,7 +223,7 @@ mod tests {
             add_node(add_node(num_node("1"), num_node("2")), num_node("3")),
             num_node("4"),
         );
-        assert_eq!(expected_tree, parse(&tokens).unwrap());
+        assert_eq!(Ok(expected_tree), parse(&tokens));
     }
 
     #[test]

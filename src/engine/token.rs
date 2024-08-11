@@ -210,6 +210,7 @@ pub mod test_helpers {
     use crate::engine::token::{Token, TokenType};
 
     const ADD_CHAR: &'static str = "+";
+    const SUB_CHAR: &'static str = "-";
 
     pub fn invalid_token(content: &str) -> Token {
         Token::new(TokenType::Invalid, content)
@@ -225,5 +226,9 @@ pub mod test_helpers {
 
     pub fn add_token() -> Token<'static> {
         Token::new(TokenType::Operator(OperatorType::Addition), ADD_CHAR)
+    }
+
+    pub fn sub_token() -> Token<'static> {
+        Token::new(TokenType::Operator(OperatorType::Subtraction), SUB_CHAR)
     }
 }

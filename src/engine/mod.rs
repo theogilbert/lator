@@ -54,6 +54,12 @@ mod tests {
     }
 
     #[rstest]
+    #[case("-1", "-1")]
+    fn test_should_evaluate_signed_number(#[case] expr: &str, #[case] result: &str) {
+        assert_eq!(evaluate(expr), Ok(result.into()));
+    }
+
+    #[rstest]
     #[case("123", "123")]
     #[case("18+1.48", "19.48")]
     #[case(" 1+\t2+    3+4 ", "10")]
