@@ -13,8 +13,13 @@ use crate::engine::operator::OperatorType;
 /// ```
 #[derive(Debug, PartialEq)]
 pub enum Ast {
+    /// An actual, raw number.
+    /// Leaf nodes in AST are always [Ast::Number] nodes.
     Number(Number),
+    /// Applies the operator described by [OperatorType] using two sub-ASTs.
     Operator(OperatorType, Box<Ast>, Box<Ast>),
+    /// Applies the opposite function to value computed from the child AST.
+    Negative(Box<Ast>),
 }
 
 impl Ast {
@@ -22,6 +27,7 @@ impl Ast {
         match self {
             Ast::Number(num) => *num,
             Ast::Operator(op, lhs, rhs) => op.calculate(lhs.resolve(), rhs.resolve()),
+            Ast::Negative(value) => -value.resolve(),
         }
     }
 }
@@ -50,7 +56,7 @@ impl OperatorType {
 mod tests {
     use rstest::rstest;
 
-    use crate::engine::ast::test_helpers::{add_node, num_node};
+    use crate::engine::ast::test_helpers::{add_node, neg_node, num_node};
 
     #[rstest]
     #[case("0")]
@@ -72,9 +78,15 @@ mod tests {
         let add = add_node(num_node(".456"), num_node("18.1"));
         assert_eq!(add.resolve().to_string(), "18.556");
     }
+
+    #[test]
+    fn should_negate_number() {
+        let ast = neg_node(num_node("10"));
+        assert_eq!(ast.resolve().to_string(), "-10")
+    }
 }
 
-/// This module provides helper functions to create ASTs with at little noise as possible.
+/// This module provides helper functions to create ASTs with as little noise as possible.
 #[cfg(test)]
 pub mod test_helpers {
     use crate::engine::ast::Ast;
@@ -91,5 +103,13 @@ pub mod test_helpers {
 
     pub fn add_node(lhs: Ast, rhs: Ast) -> Ast {
         Ast::Operator(OperatorType::Addition, Box::new(lhs), Box::new(rhs))
+    }
+
+    pub fn sub_node(lhs: Ast, rhs: Ast) -> Ast {
+        Ast::Operator(OperatorType::Subtraction, Box::new(lhs), Box::new(rhs))
+    }
+
+    pub fn neg_node(value: Ast) -> Ast {
+        Ast::Negative(Box::new(value))
     }
 }

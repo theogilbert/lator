@@ -1,26 +1,31 @@
-use std::fmt::Display;
-use std::num::ParseFloatError;
-use std::ops::{Add, Mul, Sub};
-
-use crate::engine::Error;
+use std::fmt::{Debug, Display, Formatter};
+use std::ops::{Add, Mul, Neg, Sub};
 
 /// A wrapper around a decimal number.
-#[derive(Copy, Clone, Debug, Default, PartialEq)]
+#[derive(Copy, Clone, Default, PartialEq)]
 pub struct Number {
     value: f64,
 }
 
 impl Number {
-    pub fn from_str(decimal_repr: &str) -> Result<Self, Error> {
-        let value = decimal_repr.parse().map_err(|pre: ParseFloatError| {
-            Error::InvalidNumberExpr(decimal_repr.to_string(), pre.to_string())
-        })?;
+    pub fn zero() -> Self {
+        Number { value: 0. }
+    }
+
+    pub fn from_str(decimal_repr: &str) -> Result<Self, ()> {
+        let value = decimal_repr.parse().map_err(|_| ())?;
         Ok(Number { value })
     }
 }
 
+impl Debug for Number {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.value)
+    }
+}
+
 impl Display for Number {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.value)
     }
 }
@@ -55,6 +60,14 @@ impl Mul for Number {
     }
 }
 
+impl Neg for Number {
+    type Output = Self;
+
+    fn neg(self) -> Self::Output {
+        Number { value: -self.value }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::engine::number::Number;
@@ -84,5 +97,11 @@ mod tests {
         let lhs = Number::from_str("3.5").unwrap();
         let rhs = Number::from_str("3").unwrap();
         assert_eq!("10.5", (lhs * rhs).to_string());
+    }
+
+    #[test]
+    fn test_negate_number() {
+        let num = Number::from_str("3.5").unwrap();
+        assert_eq!("-3.5", (-num).to_string());
     }
 }

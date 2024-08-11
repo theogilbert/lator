@@ -3,7 +3,7 @@ use eframe::epaint::{Color32, FontFamily, FontId, Margin};
 /// The background color of the input panel.
 pub const INPUT_BG_COLOR: Color32 = Color32::WHITE;
 /// The background color of the results panel.
-pub const RESULTS_BG_COLOR: Color32 = Color32::from_rgb(208, 208, 208);
+pub const RESULTS_BG_COLOR: Color32 = Color32::from_rgb(238, 238, 238);
 
 /// The font color of the current expression.
 pub const INPUT_TEXT_COLOR: Color32 = Color32::from_rgb(34, 34, 34);
@@ -12,7 +12,7 @@ pub const PREVIOUS_TEXT_COLOR: Color32 = Color32::from_rgb(68, 68, 68);
 /// The font color of error messages and invalid tokens in previously submitted expressions.
 pub const ERROR_TEXT_COLOR: Color32 = Color32::from_rgb(185, 48, 42);
 /// The font color of the results.
-pub const RESULTS_TEXT_COLOR: Color32 = Color32::from_rgb(100, 100, 100);
+pub const RESULTS_TEXT_COLOR: Color32 = Color32::from_rgb(70, 70, 70);
 /// The font color of a selected expression or result.
 pub const TEXT_SELECTION_COLOR: Color32 = Color32::from_rgb(34, 34, 34);
 
