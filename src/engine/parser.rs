@@ -56,9 +56,12 @@ fn build_naive_tree(tokens: &[Token]) -> Result<Ast, Error> {
 enum ParsingContext {
     /// No tokens have been parsed yet. This is the initial state of the context.
     Empty,
-    /// The parsing context only contains a negative sign, which will be applied to the next valid
-    /// token to form an [Ast::Negative] node.
+    /// The parsing context only contains a negative sign, which will be applied to the next parsed
+    /// AST node to form an [Ast::Negative] node.
     PendingNegative,
+    /// The parsing context only contains a positive sign, which will be replaced by the next parsed
+    /// AST node.
+    PendingPositive,
     /// The parsed tokens resolve to a computable value.
     Value(Ast),
     /// An operation is pending, meaning that the last token which has been parsed is
@@ -85,11 +88,12 @@ impl ParsingContext {
 
         let resolvable_node: Ast = match self {
             Self::Empty => Ok(num_node),
+            Self::PendingPositive => Ok(num_node),
+            Self::PendingNegative => Ok(Ast::Negative(Box::new(num_node))),
             Self::Value(_) => Err(()),
             Self::PendingOperation(lhs, op_type) => {
                 Ok(Ast::Operator(op_type, Box::new(lhs), Box::new(num_node)))
             }
-            Self::PendingNegative => Ok(Ast::Negative(Box::new(num_node))),
         }?;
 
         Ok(Self::Value(resolvable_node))
@@ -99,6 +103,7 @@ impl ParsingContext {
         match self {
             Self::Empty => match op_type {
                 OperatorType::Subtraction => Ok(Self::PendingNegative),
+                OperatorType::Addition => Ok(Self::PendingPositive),
                 _ => Err(()),
             },
             Self::Value(lhs) => Ok(Self::PendingOperation(lhs, op_type)),
@@ -171,9 +176,11 @@ mod tests {
     }
 
     #[test]
-    fn test_parsing_sequence_with_only_operator_and_no_lhs_should_fail() {
-        let seq = [add_token(), num_token("2")];
-        assert_eq!(Err(Error::InvalidExpression(0)), parse(&seq));
+    fn test_parsing_positive_number_should_produce_value_node() {
+        let tokens = [add_token(), num_token("1")];
+        let expected_tree = num_node("1");
+
+        assert_eq!(Ok(expected_tree), parse(&tokens));
     }
 
     #[test]

@@ -46,7 +46,6 @@ mod tests {
 
     #[rstest]
     #[case("invalid")]
-    #[case("+1")]
     #[case("1+")]
     #[case("1++1")]
     fn test_should_fail_when_expression_is_invalid(#[case] expr: &str) {
@@ -55,6 +54,7 @@ mod tests {
 
     #[rstest]
     #[case("-1", "-1")]
+    #[case("+1", "1")]
     fn test_should_evaluate_signed_number(#[case] expr: &str, #[case] result: &str) {
         assert_eq!(evaluate(expr), Ok(result.into()));
     }
