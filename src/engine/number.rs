@@ -104,4 +104,10 @@ mod tests {
         let num = Number::from_str("3.5").unwrap();
         assert_eq!("-3.5", (-num).to_string());
     }
+
+    #[test]
+    fn test_decimal_number_with_no_decimal_part() {
+        let num = Number::from_str("12.").unwrap();
+        assert_eq!("12", num.to_string())
+    }
 }
