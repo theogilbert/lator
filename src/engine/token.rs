@@ -46,6 +46,16 @@ impl<'a> Token<'a> {
     }
 }
 
+impl<'a> Token<'a> {
+    pub fn is_whitespace(&self) -> bool {
+        self.token_type == TokenType::Whitespace
+    }
+
+    pub fn is_operator(&self) -> bool {
+        matches!(self.token_type, TokenType::Operator(_))
+    }
+}
+
 /** Split the expression in an ordered sequence of tokens.\
 Each character of the expression belongs to exactly one of the returned tokens.
 */
