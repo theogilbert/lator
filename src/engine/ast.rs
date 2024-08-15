@@ -11,7 +11,7 @@ use crate::engine::operator::OperatorType;
 ///     /   \
 ///    2     3
 /// ```
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Ast {
     /// An actual, raw number.
     /// Leaf nodes in AST are always [Ast::Number] nodes.

@@ -43,10 +43,9 @@ fn build_naive_tree(tokens: &[Token]) -> Result<Ast, Error> {
     match parsing_context {
         ParsingContext::Value(ast) => Ok(ast),
         ParsingContext::Empty => Err(Error::EmptyExpression()),
-        _ => {
-            // unwrap() is safe as we know that the tokens array is not empty
-            let last_token = tokens.last().unwrap();
-            Err(Error::InvalidExpression(cursor - last_token.length()))
+        ParsingContext::PendingOperation(_, _, _) => {
+            let op_position = find_position_of_unfinished_operator(tokens);
+            Err(Error::InvalidExpression(op_position))
         }
     }
 }
@@ -121,13 +120,33 @@ impl ParsingContext {
     }
 }
 
+/// Given a sequence of tokens, retrieve the position of the last unfinished operator, ignoring
+/// following sign operators.
+fn find_position_of_unfinished_operator(tokens: &[Token]) -> usize {
+    let mut current_pos = 0;
+    let mut last_operator_pos = 0;
+    let mut in_operator_sequence = false;
+
+    for token in tokens {
+        if !in_operator_sequence && token.is_operator() {
+            last_operator_pos = current_pos;
+        }
+
+        if !token.is_whitespace() {
+            in_operator_sequence = token.is_operator();
+        }
+
+        current_pos += token.length();
+    }
+    return last_operator_pos;
+}
+
 /// Re-arrange a naive AST to make sure that operators with higher priority are evaluated first.\
 /// As an AST is evaluated from the bottom up, this means that unless parenthesis are involved,
-/// higher priority operators should end up deeper in the tree than lower priority ancestor
-/// operators.
+/// higher priority operators should end up deeper in the tree than lower priority operators.
 fn prioritize_operators(naive_tree: Ast) -> Ast {
     match naive_tree {
-        Ast::Number(_) => naive_tree,
+        Ast::Number(_) | Ast::Negative(_) => naive_tree, // no further prioritization on these nodes
         Ast::Operator(kind, lhs, rhs) => {
             // As documented in build_naive_tree, a naive tree should be left-aligned.
             // The right child should only be populated by number nodes.
@@ -139,7 +158,7 @@ fn prioritize_operators(naive_tree: Ast) -> Ast {
 
             let left_ast = prioritize_operators(*lhs);
             match left_ast {
-                Ast::Number(_) => Ast::Operator(kind, Box::new(left_ast), rhs),
+                Ast::Number(_) | Ast::Negative(_) => Ast::Operator(kind, Box::new(left_ast), rhs),
                 Ast::Operator(child_kind, child_lhs, child_rhs) => {
                     if kind.priority() > child_kind.priority() {
                         // Parent operator has higher priority than child operator.
@@ -152,18 +171,21 @@ fn prioritize_operators(naive_tree: Ast) -> Ast {
                         Ast::Operator(kind, Box::new(old_child), rhs)
                     }
                 }
-                Ast::Negative(_) => unimplemented!(),
             }
         }
-        Ast::Negative(child) => Ast::Negative(child),
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use rstest::rstest;
+
     use crate::engine::ast::test_helpers::*;
     use crate::engine::parser::{parse, prioritize_operators};
-    use crate::engine::token::test_helpers::{add_token, mul_token, num_token, sub_token};
+    use crate::engine::token::test_helpers::{
+        add_token, mul_token, num_token, sub_token, whitespace_token,
+    };
+    use crate::engine::token::Token;
     use crate::engine::Error;
 
     #[test]
@@ -282,5 +304,21 @@ mod tests {
         );
 
         assert_eq!(sorted_ast, prioritize_operators(naive_ast));
+    }
+
+    #[test]
+    fn should_prioritize_with_left_negative_child_should_be_supported() {
+        let naive_ast = add_node(neg_node(num_node("1")), num_node("2"));
+
+        assert_eq!(naive_ast, prioritize_operators(naive_ast.clone()));
+    }
+
+    #[rstest]
+    #[case(&[num_token("1"), mul_token(), whitespace_token(" "), ], 1)]
+    #[case(&[num_token("1"), whitespace_token(" "), mul_token()], 2)]
+    #[case(&[num_token("1"), whitespace_token(" "), add_token(),
+                whitespace_token(""), sub_token(), whitespace_token("")], 2)]
+    fn should_detect_last_invalid_operator_position(#[case] tokens: &[Token], #[case] pos: usize) {
+        assert_eq!(Err(Error::InvalidExpression(pos)), parse(tokens));
     }
 }

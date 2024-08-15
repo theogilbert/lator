@@ -57,7 +57,7 @@ mod tests {
     #[case("-1", "-1")]
     #[case("+1", "1")]
     fn test_should_evaluate_signed_number(#[case] expr: &str, #[case] result: &str) {
-        assert_eq!(evaluate(expr), Ok(result.into()));
+        assert_eq!(evaluate(expr), Ok(result.to_string()));
     }
 
     #[rstest]
@@ -70,7 +70,7 @@ mod tests {
         #[case] expr: &str,
         #[case] result: &str,
     ) {
-        assert_eq!(evaluate(expr), Ok(result.into()));
+        assert_eq!(evaluate(expr), Ok(result.to_string()));
     }
 
     #[rstest]
@@ -83,6 +83,6 @@ mod tests {
     #[case("91×59×41×88×21+69+67×8", "406798997")]
     #[case("1+2×-3", "-5")]
     fn test_should_evaluate_valid_expressions(#[case] expr: &str, #[case] result: &str) {
-        assert_eq!(evaluate(expr), Ok(result.into()));
+        assert_eq!(evaluate(expr), Ok(result.to_string()));
     }
 }
