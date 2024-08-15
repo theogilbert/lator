@@ -4,7 +4,7 @@ use eframe::epaint::text::{TextFormat, TextWrapMode};
 use eframe::epaint::Margin;
 use egui::text::LayoutJob;
 use egui::{
-    CentralPanel, Context, Frame, Galley, InputState, Label, SidePanel, TextBuffer, TextEdit,
+    CentralPanel, Context, Frame, Galley, InputState, Key, Label, SidePanel, TextBuffer, TextEdit,
     TextStyle, Ui,
 };
 use egui::{Event, RichText};
@@ -91,7 +91,7 @@ impl InputPanel {
         let input_result = CentralPanel::default()
             .frame(Self::build_frame())
             .show(ctx, |ui| {
-                self.show_and_ret_submitted_expr(ui, history_entries)
+                self.show_and_ret_submitted_expr(ui, ctx, history_entries)
             });
 
         input_result.inner
@@ -114,6 +114,7 @@ impl InputPanel {
     fn show_and_ret_submitted_expr(
         &mut self,
         ui: &mut Ui,
+        ctx: &Context,
         history_entries: Vec<Arc<Galley>>,
     ) -> Option<String> {
         history_entries.into_iter().for_each(|previous_expr| {
@@ -123,13 +124,16 @@ impl InputPanel {
         let expr_edit = self.build_expr_text_edit();
         let edit_result = ui.add(expr_edit);
 
-        let mut submission = None;
-        if edit_result.lost_focus() && !self.expression.is_empty() {
-            submission = Some(self.expression.take());
+        let enter_pressed =
+            edit_result.lost_focus() && ctx.input(|input| input.key_down(Key::Enter));
+
+        let mut submitted_expression = None;
+        if enter_pressed && !self.expression.is_empty() {
+            submitted_expression = Some(self.expression.take());
         }
 
         edit_result.request_focus();
-        submission
+        submitted_expression
     }
 
     /// Produce a Galley representing the rendered historized expression.
