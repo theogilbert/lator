@@ -146,7 +146,7 @@ fn find_position_of_unfinished_operator(tokens: &[Token]) -> usize {
 /// higher priority operators should end up deeper in the tree than lower priority operators.
 fn prioritize_operators(naive_tree: Ast) -> Ast {
     match naive_tree {
-        Ast::Number(_) => naive_tree,
+        Ast::Number(_) | Ast::Negative(_) => naive_tree, // no further prioritization on these nodes
         Ast::Operator(kind, lhs, rhs) => {
             // As documented in build_naive_tree, a naive tree should be left-aligned.
             // The right child should only be populated by number nodes.
@@ -158,7 +158,7 @@ fn prioritize_operators(naive_tree: Ast) -> Ast {
 
             let left_ast = prioritize_operators(*lhs);
             match left_ast {
-                Ast::Number(_) => Ast::Operator(kind, Box::new(left_ast), rhs),
+                Ast::Number(_) | Ast::Negative(_) => Ast::Operator(kind, Box::new(left_ast), rhs),
                 Ast::Operator(child_kind, child_lhs, child_rhs) => {
                     if kind.priority() > child_kind.priority() {
                         // Parent operator has higher priority than child operator.
@@ -171,10 +171,8 @@ fn prioritize_operators(naive_tree: Ast) -> Ast {
                         Ast::Operator(kind, Box::new(old_child), rhs)
                     }
                 }
-                Ast::Negative(_) => unimplemented!(),
             }
         }
-        Ast::Negative(child) => Ast::Negative(child),
     }
 }
 
@@ -306,6 +304,13 @@ mod tests {
         );
 
         assert_eq!(sorted_ast, prioritize_operators(naive_ast));
+    }
+
+    #[test]
+    fn should_prioritize_with_left_negative_child_should_be_supported() {
+        let naive_ast = add_node(neg_node(num_node("1")), num_node("2"));
+
+        assert_eq!(naive_ast, prioritize_operators(naive_ast.clone()));
     }
 
     #[rstest]
