@@ -7,7 +7,7 @@ use crate::engine::operator::OperatorType;
 /// ```text
 ///    +
 ///  /   \
-/// 1     *
+/// 1     ×
 ///     /   \
 ///    2     3
 /// ```
@@ -23,6 +23,7 @@ pub enum Ast {
 }
 
 impl Ast {
+    /// Resolve the value from an AST, starting from the bottom nodes up to the root of the tree.
     pub fn resolve(&self) -> Number {
         match self {
             Ast::Number(num) => *num,
@@ -38,16 +39,6 @@ impl OperatorType {
             OperatorType::Addition => lhs + rhs,
             OperatorType::Subtraction => lhs - rhs,
             OperatorType::Multiplication => lhs * rhs,
-        }
-    }
-
-    /// Indicates the priority of an operator.\
-    /// A higher value means a higher priority.
-    pub fn priority(&self) -> usize {
-        match self {
-            OperatorType::Addition => 0,
-            OperatorType::Subtraction => 0,
-            OperatorType::Multiplication => 1,
         }
     }
 }

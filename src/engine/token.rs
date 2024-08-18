@@ -56,9 +56,8 @@ impl<'a> Token<'a> {
     }
 }
 
-/** Split the expression in an ordered sequence of tokens.\
-Each character of the expression belongs to exactly one of the returned tokens.
-*/
+/// Split the expression in an ordered sequence of tokens.\
+/// Each character of the expression belongs to exactly one of the returned tokens.
 pub fn tokenize(expression: &str) -> Vec<Token> {
     let mut tokens = vec![];
     let mut cursor = 0;
@@ -140,10 +139,11 @@ fn build_token_matching_pattern<'a>(
 
 #[cfg(test)]
 mod tests {
+    use rstest::rstest;
+
     use crate::engine::token::test_helpers::{
         add_token, invalid_token, num_token, whitespace_token,
     };
-    use rstest::rstest;
 
     use super::*;
 

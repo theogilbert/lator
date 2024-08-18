@@ -123,22 +123,22 @@ impl ParsingContext {
 /// Given a sequence of tokens, retrieve the position of the last unfinished operator, ignoring
 /// following sign operators.
 fn find_position_of_unfinished_operator(tokens: &[Token]) -> usize {
-    let mut current_pos = 0;
-    let mut last_operator_pos = 0;
-    let mut in_operator_sequence = false;
+    let mut current_position = 0;
+    let mut last_operator_position = 0;
+    let mut previous_token_was_operator = false;
 
     for token in tokens {
-        if !in_operator_sequence && token.is_operator() {
-            last_operator_pos = current_pos;
+        if !previous_token_was_operator && token.is_operator() {
+            last_operator_position = current_position;
         }
 
         if !token.is_whitespace() {
-            in_operator_sequence = token.is_operator();
+            previous_token_was_operator = token.is_operator();
         }
 
-        current_pos += token.length();
+        current_position += token.length();
     }
-    return last_operator_pos;
+    return last_operator_position;
 }
 
 /// Re-arrange a naive AST to make sure that operators with higher priority are evaluated first.\

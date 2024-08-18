@@ -23,7 +23,7 @@ pub enum Error {
     InvalidExpression(usize),
 }
 
-/** Evaluates textual expressions */
+/// Evaluates textual expressions
 pub fn evaluate(expr: &str) -> Result<String, Error> {
     let tokens = tokenize(expr);
     let ast_root = parse(&tokens)?;
@@ -47,8 +47,8 @@ mod tests {
     #[rstest]
     #[case("invalid")]
     #[case("1+")]
-    #[case("1+*1")]
-    #[case("1**1")]
+    #[case("1+×1")]
+    #[case("1××1")]
     fn test_should_fail_when_expression_is_invalid(#[case] expr: &str) {
         assert!(matches!(evaluate(expr), Err(Error::InvalidExpression(_))));
     }

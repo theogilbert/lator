@@ -6,6 +6,18 @@ pub enum OperatorType {
     Multiplication,
 }
 
+impl OperatorType {
+    /// Indicates the priority of an operator. A higher value means a higher priority.\
+    /// Higher priority operators should be evaluated first.
+    pub fn priority(&self) -> usize {
+        match self {
+            OperatorType::Addition => 0,
+            OperatorType::Subtraction => 0,
+            OperatorType::Multiplication => 1,
+        }
+    }
+}
+
 /// Describes either a positive `+` or negative `-` sign which can be present in front of
 /// an expression.
 pub enum Sign {
