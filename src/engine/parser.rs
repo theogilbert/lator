@@ -148,30 +148,75 @@ fn prioritize_operators(naive_tree: Ast) -> Ast {
     match naive_tree {
         Ast::Number(_) | Ast::Negative(_) => naive_tree, // no further prioritization on these nodes
         Ast::Operator(kind, lhs, rhs) => {
-            // As documented in build_naive_tree, a naive tree should be left-aligned.
-            // The right child should only be populated by number nodes.
-            assert!(
-                matches!(*rhs, Ast::Number(_)) || matches!(*rhs, Ast::Negative(_)),
-                "rhs of naive tree node is not a number: {:?}",
-                *rhs
-            );
+            let mut operator = Operator::new(kind, *lhs, *rhs);
 
-            let left_ast = prioritize_operators(*lhs);
-            match left_ast {
-                Ast::Number(_) | Ast::Negative(_) => Ast::Operator(kind, Box::new(left_ast), rhs),
-                Ast::Operator(child_kind, child_lhs, child_rhs) => {
-                    if kind.priority() > child_kind.priority() {
-                        // Parent operator has higher priority than child operator.
-                        // Parent operator should be applied first, and thus should be lower in
-                        // the tree hierarchy.
-                        let new_child = Ast::Operator(kind, child_rhs, rhs);
-                        Ast::Operator(child_kind, child_lhs, Box::new(new_child))
-                    } else {
-                        let old_child = Ast::Operator(child_kind, child_lhs, child_rhs);
-                        Ast::Operator(kind, Box::new(old_child), rhs)
-                    }
-                }
+            operator.lhs = prioritize_operators(operator.lhs);
+            operator = operator.reorder_with_left_branch();
+
+            operator.rhs = prioritize_operators(operator.rhs);
+            operator = operator.reorder_with_right_branch();
+
+            operator.into_ast()
+        }
+    }
+}
+
+struct Operator {
+    op_type: OperatorType,
+    lhs: Ast,
+    rhs: Ast,
+}
+
+impl Operator {
+    pub fn new(op_type: OperatorType, lhs: Ast, rhs: Ast) -> Self {
+        Operator { op_type, lhs, rhs }
+    }
+
+    pub fn into_ast(self) -> Ast {
+        Ast::Operator(self.op_type, Box::new(self.lhs), Box::new(self.rhs))
+    }
+
+    /// If the parent operation should be evaluated before its left child, swap them such as:
+    ///
+    /// ```text
+    ///  (a+b)×c  becomes  a+(b×c)
+    ///     ×                 +
+    ///    / \               / \
+    ///   +   c             a   ×
+    ///  / \                   / \
+    /// a   b                 b   c
+    /// ```
+    pub fn reorder_with_left_branch(self) -> Operator {
+        match self.lhs {
+            Ast::Operator(child_op_type, child_lhs, child_rhs)
+                if self.op_type.priority() > child_op_type.priority() =>
+            {
+                let prioritized = Ast::Operator(self.op_type, child_rhs, Box::new(self.rhs));
+                Operator::new(child_op_type, *child_lhs, prioritized)
             }
+            _ => self,
+        }
+    }
+
+    /// If the parent operation should be evaluated before its right child, swap them such as:
+    ///
+    /// ```text
+    ///  a×(b+c)  becomes  (a×b)+c
+    ///     ×                 +
+    ///    / \               / \
+    ///   a   +             ×   c
+    ///      / \           / \
+    ///     b   c         a   b
+    /// ```
+    pub fn reorder_with_right_branch(self) -> Operator {
+        match self.rhs {
+            Ast::Operator(child_op_type, child_lhs, child_rhs)
+                if self.op_type.priority() > child_op_type.priority() =>
+            {
+                let prioritized = Ast::Operator(self.op_type, Box::new(self.lhs), child_lhs);
+                Operator::new(child_op_type, prioritized, *child_rhs)
+            }
+            _ => self,
         }
     }
 }
@@ -279,6 +324,30 @@ mod test_prioritization {
     use crate::engine::Error;
 
     #[test]
+    fn should_prioritize_tree_when_lhs_has_lower_priority() {
+        let original_tree = mul_node(add_node(num_node("1"), num_node("2")), num_node("3"));
+
+        prioritize_and_check_tree(original_tree);
+    }
+
+    #[test]
+    fn should_prioritize_tree_when_rhs_has_lower_priority() {
+        let original_tree = mul_node(num_node("1"), add_node(num_node("2"), num_node("3")));
+
+        prioritize_and_check_tree(original_tree);
+    }
+
+    #[test]
+    fn should_prioritize_tree_when_lhs_and_rhs_have_lower_priority() {
+        let original_tree = mul_node(
+            add_node(num_node("1"), num_node("2")),
+            add_node(num_node("3"), num_node("4")),
+        );
+
+        prioritize_and_check_tree(original_tree);
+    }
+
+    #[test]
     fn should_prioritize_multi_level_naive_tree_using_operator_priority() {
         // A tree naively parsed as ((1+2)*3)+4 should be updated to 1+(2*3)+4
         let original_tree = add_node(
@@ -286,34 +355,35 @@ mod test_prioritization {
             num_node("4"),
         );
 
-        assert_tree_is_correctly_prioritized(original_tree);
+        prioritize_and_check_tree(original_tree);
     }
 
-    fn assert_tree_is_correctly_prioritized(original_tree: Ast) {
+    fn prioritize_and_check_tree(original_tree: Ast) {
         let original_repr = original_tree.to_string();
 
         let prioritized_tree = prioritize_operators(original_tree);
         let prioritized_repr = prioritized_tree.to_string();
 
         assert_subtree_is_prioritized(prioritized_tree);
+        // the order of numbers and operators should be retained:
         assert_eq!(original_repr, prioritized_repr);
     }
 
-    /// A tree is evaluated from the bottom-up.
-    /// Hence, a tree is considered prioritized as long as a child node has a higher priority than
-    /// its parent node.
+    /// A tree is evaluated from the bottom-up.\
+    /// Hence, in a prioritized tree, children nodes should never have lower priorities than
+    /// their parents.
     fn assert_subtree_is_prioritized(ast: Ast) {
         match ast {
             Ast::Number(_) | Ast::Negative(_) => {}
             Ast::Operator(op_kind, lhs, rhs) => {
                 assert!(
-                    lhs.priority() >= op_kind.priority(),
+                    node_priority(&lhs) >= op_kind.priority(),
                     "Left child {:?} has a lower priority than parent operator {:?}",
                     lhs,
                     op_kind
                 );
                 assert!(
-                    rhs.priority() >= op_kind.priority(),
+                    node_priority(&rhs) >= op_kind.priority(),
                     "Right child {:?} has a lower priority than parent operator {:?}",
                     rhs,
                     op_kind
@@ -324,9 +394,17 @@ mod test_prioritization {
         }
     }
 
+    fn node_priority(ast: &Ast) -> usize {
+        match ast {
+            Ast::Number(_) => usize::MAX,
+            Ast::Operator(op_type, _, _) => op_type.priority(),
+            Ast::Negative(value) => node_priority(value),
+        }
+    }
+
     #[test]
-    fn should_prioritize_with_left_negative_child_should_be_supported() {
-        let naive_ast = add_node(neg_node(num_node("1")), num_node("2"));
+    fn should_support_prioritizing_with_negative_children() {
+        let naive_ast = add_node(neg_node(num_node("1")), neg_node(num_node("2")));
 
         assert_eq!(naive_ast, prioritize_operators(naive_ast.clone()));
     }
