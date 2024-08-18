@@ -1,3 +1,5 @@
+use std::fmt::{Display, Formatter};
+
 use crate::engine::number::Number;
 use crate::engine::operator::OperatorType;
 
@@ -29,6 +31,16 @@ impl Ast {
             Ast::Number(num) => *num,
             Ast::Operator(op, lhs, rhs) => op.calculate(lhs.resolve(), rhs.resolve()),
             Ast::Negative(value) => -value.resolve(),
+        }
+    }
+}
+
+impl Display for Ast {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Ast::Number(value) => write!(f, "{}", value),
+            Ast::Operator(op_type, lhs, rhs) => write!(f, "{}{}{}", lhs, op_type, rhs),
+            Ast::Negative(value) => write!(f, "-{}", value),
         }
     }
 }

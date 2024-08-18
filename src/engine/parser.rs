@@ -178,14 +178,9 @@ fn prioritize_operators(naive_tree: Ast) -> Ast {
 
 #[cfg(test)]
 mod tests {
-    use rstest::rstest;
-
     use crate::engine::ast::test_helpers::*;
-    use crate::engine::parser::{parse, prioritize_operators};
-    use crate::engine::token::test_helpers::{
-        add_token, mul_token, num_token, sub_token, whitespace_token,
-    };
-    use crate::engine::token::Token;
+    use crate::engine::parser::parse;
+    use crate::engine::token::test_helpers::{add_token, mul_token, num_token, sub_token};
     use crate::engine::Error;
 
     #[test]
@@ -270,40 +265,63 @@ mod tests {
         let seq = [num_token("1"), add_token()];
         assert_eq!(Err(Error::InvalidExpression(1)), parse(&seq));
     }
+}
 
-    #[test]
-    fn test_naive_tree_should_always_develop_through_left_branch() {
-        let tokens = [
-            num_token("1"),
-            add_token(),
-            num_token("2"),
-            add_token(),
-            num_token("3"),
-            add_token(),
-            num_token("4"),
-        ];
+#[cfg(test)]
+mod test_prioritization {
+    use rstest::rstest;
 
-        let expected_tree = add_node(
-            add_node(add_node(num_node("1"), num_node("2")), num_node("3")),
-            num_node("4"),
-        );
-        assert_eq!(Ok(expected_tree), parse(&tokens));
-    }
+    use crate::engine::ast::test_helpers::*;
+    use crate::engine::ast::Ast;
+    use crate::engine::parser::{parse, prioritize_operators};
+    use crate::engine::token::test_helpers::*;
+    use crate::engine::token::Token;
+    use crate::engine::Error;
 
     #[test]
     fn should_prioritize_multi_level_naive_tree_using_operator_priority() {
-        // At first the expression 1+2*3+4 will be naively parsed as ((1+2)*3)+4
-        let naive_ast = add_node(
+        // A tree naively parsed as ((1+2)*3)+4 should be updated to 1+(2*3)+4
+        let original_tree = add_node(
             mul_node(add_node(num_node("1"), num_node("2")), num_node("3")),
             num_node("4"),
         );
-        // Once sorted, the AST should be transformed to (1+(2*3))+4 to run the multiplication first
-        let sorted_ast = add_node(
-            add_node(num_node("1"), mul_node(num_node("2"), num_node("3"))),
-            num_node("4"),
-        );
 
-        assert_eq!(sorted_ast, prioritize_operators(naive_ast));
+        assert_tree_is_correctly_prioritized(original_tree);
+    }
+
+    fn assert_tree_is_correctly_prioritized(original_tree: Ast) {
+        let original_repr = original_tree.to_string();
+
+        let prioritized_tree = prioritize_operators(original_tree);
+        let prioritized_repr = prioritized_tree.to_string();
+
+        assert_subtree_is_prioritized(prioritized_tree);
+        assert_eq!(original_repr, prioritized_repr);
+    }
+
+    /// A tree is evaluated from the bottom-up.
+    /// Hence, a tree is considered prioritized as long as a child node has a higher priority than
+    /// its parent node.
+    fn assert_subtree_is_prioritized(ast: Ast) {
+        match ast {
+            Ast::Number(_) | Ast::Negative(_) => {}
+            Ast::Operator(op_kind, lhs, rhs) => {
+                assert!(
+                    lhs.priority() >= op_kind.priority(),
+                    "Left child {:?} has a lower priority than parent operator {:?}",
+                    lhs,
+                    op_kind
+                );
+                assert!(
+                    rhs.priority() >= op_kind.priority(),
+                    "Right child {:?} has a lower priority than parent operator {:?}",
+                    rhs,
+                    op_kind
+                );
+                assert_subtree_is_prioritized(*lhs);
+                assert_subtree_is_prioritized(*rhs);
+            }
+        }
     }
 
     #[test]
