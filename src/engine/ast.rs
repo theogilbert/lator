@@ -1,3 +1,5 @@
+use std::fmt::{Display, Formatter};
+
 use crate::engine::number::Number;
 use crate::engine::operator::OperatorType;
 
@@ -7,7 +9,7 @@ use crate::engine::operator::OperatorType;
 /// ```text
 ///    +
 ///  /   \
-/// 1     *
+/// 1     ×
 ///     /   \
 ///    2     3
 /// ```
@@ -23,11 +25,22 @@ pub enum Ast {
 }
 
 impl Ast {
-    pub fn resolve(&self) -> Number {
+    /// Resolve the value from an AST, starting from the bottom nodes up to the root of the tree.
+    pub fn resolve(self) -> Number {
         match self {
-            Ast::Number(num) => *num,
+            Ast::Number(num) => num,
             Ast::Operator(op, lhs, rhs) => op.calculate(lhs.resolve(), rhs.resolve()),
             Ast::Negative(value) => -value.resolve(),
+        }
+    }
+}
+
+impl Display for Ast {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Ast::Number(value) => write!(f, "{}", value),
+            Ast::Operator(op_type, lhs, rhs) => write!(f, "{}{}{}", lhs, op_type, rhs),
+            Ast::Negative(value) => write!(f, "-{}", value),
         }
     }
 }
@@ -38,16 +51,6 @@ impl OperatorType {
             OperatorType::Addition => lhs + rhs,
             OperatorType::Subtraction => lhs - rhs,
             OperatorType::Multiplication => lhs * rhs,
-        }
-    }
-
-    /// Indicates the priority of an operator.\
-    /// A higher value means a higher priority.
-    pub fn priority(&self) -> usize {
-        match self {
-            OperatorType::Addition => 0,
-            OperatorType::Subtraction => 0,
-            OperatorType::Multiplication => 1,
         }
     }
 }
