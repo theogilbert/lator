@@ -26,9 +26,9 @@ pub enum Ast {
 
 impl Ast {
     /// Resolve the value from an AST, starting from the bottom nodes up to the root of the tree.
-    pub fn resolve(&self) -> Number {
+    pub fn resolve(self) -> Number {
         match self {
-            Ast::Number(num) => *num,
+            Ast::Number(num) => num,
             Ast::Operator(op, lhs, rhs) => op.calculate(lhs.resolve(), rhs.resolve()),
             Ast::Negative(value) => -value.resolve(),
         }
