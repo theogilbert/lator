@@ -1,5 +1,5 @@
 use std::fmt::{Debug, Display, Formatter};
-use std::ops::{Add, Mul, Neg, Sub};
+use std::ops::{Add, Div, Mul, Neg, Sub};
 
 /// A wrapper around a decimal number.
 #[derive(Copy, Clone, Default, PartialEq)]
@@ -60,6 +60,16 @@ impl Mul for Number {
     }
 }
 
+impl Div for Number {
+    type Output = Self;
+
+    fn div(self, rhs: Self) -> Self::Output {
+        Number {
+            value: self.value / rhs.value,
+        }
+    }
+}
+
 impl Neg for Number {
     type Output = Self;
 
@@ -90,6 +100,11 @@ mod tests {
     #[test]
     fn test_mul_number() {
         assert_eq!("10.5", (num("3.5") * num("3")).to_string());
+    }
+
+    #[test]
+    fn test_div_number() {
+        assert_eq!("1.5", (num("3") / num("2")).to_string());
     }
 
     #[test]
