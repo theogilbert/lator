@@ -93,11 +93,11 @@ mod tests {
 #[cfg(test)]
 pub mod test_helpers {
     use crate::engine::ast::Ast;
-    use crate::engine::number::Number;
+    use crate::engine::number::test_helpers::num;
     use crate::engine::operator::OperatorType;
 
     pub fn num_node(value: &str) -> Ast {
-        Ast::Number(Number::from_str(value).unwrap())
+        Ast::Number(num(value))
     }
 
     pub fn mul_node(lhs: Ast, rhs: Ast) -> Ast {

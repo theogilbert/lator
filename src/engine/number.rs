@@ -70,44 +70,44 @@ impl Neg for Number {
 
 #[cfg(test)]
 mod tests {
-    use crate::engine::number::Number;
+    use crate::engine::number::test_helpers::num;
 
     #[test]
     fn test_display_number() {
-        let num = Number::from_str("12.34").unwrap();
-        assert_eq!("12.34", num.to_string())
+        assert_eq!("12.34", num("12.34").to_string())
     }
 
     #[test]
     fn test_add_number() {
-        let lhs = Number::from_str(".123").unwrap();
-        let rhs = Number::from_str("4").unwrap();
-        assert_eq!("4.123", (lhs + rhs).to_string());
+        assert_eq!("4.123", (num(".123") + num("4")).to_string());
     }
 
     #[test]
     fn test_sub_number() {
-        let lhs = Number::from_str("3.5").unwrap();
-        let rhs = Number::from_str("1").unwrap();
-        assert_eq!("2.5", (lhs - rhs).to_string());
+        assert_eq!("2.5", (num("3.5") - num("1")).to_string());
     }
 
     #[test]
     fn test_mul_number() {
-        let lhs = Number::from_str("3.5").unwrap();
-        let rhs = Number::from_str("3").unwrap();
-        assert_eq!("10.5", (lhs * rhs).to_string());
+        assert_eq!("10.5", (num("3.5") * num("3")).to_string());
     }
 
     #[test]
     fn test_negate_number() {
-        let num = Number::from_str("3.5").unwrap();
-        assert_eq!("-3.5", (-num).to_string());
+        assert_eq!("-3.5", (-num("3.5")).to_string());
     }
 
     #[test]
     fn test_decimal_number_with_no_decimal_part() {
-        let num = Number::from_str("12.").unwrap();
-        assert_eq!("12", num.to_string())
+        assert_eq!("12", num("12").to_string())
+    }
+}
+
+#[cfg(test)]
+pub mod test_helpers {
+    use crate::engine::number::Number;
+
+    pub fn num(repr: &str) -> Number {
+        Number::from_str(repr).unwrap()
     }
 }
