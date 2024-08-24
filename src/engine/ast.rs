@@ -51,7 +51,7 @@ impl OperatorType {
             OperatorType::Addition => lhs + rhs,
             OperatorType::Subtraction => lhs - rhs,
             OperatorType::Multiplication => lhs * rhs,
-            OperatorType::Division => unimplemented!(),
+            OperatorType::Division => lhs / rhs,
         }
     }
 }
@@ -103,6 +103,10 @@ pub mod test_helpers {
 
     pub fn mul_node(lhs: Ast, rhs: Ast) -> Ast {
         Ast::Operator(OperatorType::Multiplication, Box::new(lhs), Box::new(rhs))
+    }
+
+    pub fn div_node(lhs: Ast, rhs: Ast) -> Ast {
+        Ast::Operator(OperatorType::Division, Box::new(lhs), Box::new(rhs))
     }
 
     pub fn add_node(lhs: Ast, rhs: Ast) -> Ast {

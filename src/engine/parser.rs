@@ -138,7 +138,8 @@ fn find_position_of_unfinished_operator(tokens: &[Token]) -> usize {
 
         current_position += token.length();
     }
-    return last_operator_position;
+
+    last_operator_position
 }
 
 /// Re-arrange a naive AST to make sure that operators with higher priority are evaluated first.\
@@ -332,7 +333,7 @@ mod test_prioritization {
 
     #[test]
     fn should_prioritize_tree_when_rhs_has_lower_priority() {
-        let original_tree = mul_node(num_node("1"), add_node(num_node("2"), num_node("3")));
+        let original_tree = div_node(num_node("1"), add_node(num_node("2"), num_node("3")));
 
         prioritize_and_check_tree(original_tree);
     }
