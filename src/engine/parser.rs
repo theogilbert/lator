@@ -75,6 +75,8 @@ impl ParsingContext {
             TokenType::Whitespace => Ok(self), // Whitespaces do not affect the parsing context.
             TokenType::Number => self.update_from_number(token.content()),
             TokenType::Operator(op_type) => self.update_from_operator(op_type),
+            TokenType::OpenParenthesis => Err(()),
+            TokenType::CloseParenthesis => Err(()),
         }
     }
 
