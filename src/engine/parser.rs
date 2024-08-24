@@ -161,6 +161,10 @@ fn prioritize_operators(naive_tree: Ast) -> Ast {
 
             operator.into_ast()
         }
+        Ast::Prioritized(value) => {
+            let prioritized_subtree = prioritize_operators(*value);
+            Ast::Prioritized(Box::new(prioritized_subtree))
+        }
     }
 }
 
@@ -394,6 +398,7 @@ mod test_prioritization {
                 assert_subtree_is_prioritized(*lhs);
                 assert_subtree_is_prioritized(*rhs);
             }
+            Ast::Prioritized(value) => assert_subtree_is_prioritized(*value),
         }
     }
 
@@ -402,12 +407,23 @@ mod test_prioritization {
             Ast::Number(_) => usize::MAX,
             Ast::Operator(op_type, _, _) => op_type.priority(),
             Ast::Negative(value) => node_priority(value),
+            Ast::Prioritized(_) => usize::MAX,
         }
     }
 
     #[test]
-    fn should_support_prioritizing_with_negative_children() {
+    fn should_support_prioritizing_when_children_are_negative() {
         let naive_ast = add_node(neg_node(num_node("1")), neg_node(num_node("2")));
+
+        assert_eq!(naive_ast, prioritize_operators(naive_ast.clone()));
+    }
+
+    #[test]
+    fn should_not_prioritize_mul_over_explicitly_prioritized_add() {
+        let naive_ast = mul_node(
+            num_node("1"),
+            prioritized_node(add_node(num_node("2"), num_node("3"))),
+        );
 
         assert_eq!(naive_ast, prioritize_operators(naive_ast.clone()));
     }
