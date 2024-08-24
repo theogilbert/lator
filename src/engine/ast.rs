@@ -51,6 +51,7 @@ impl OperatorType {
             OperatorType::Addition => lhs + rhs,
             OperatorType::Subtraction => lhs - rhs,
             OperatorType::Multiplication => lhs * rhs,
+            OperatorType::Division => lhs / rhs,
         }
     }
 }
@@ -93,15 +94,19 @@ mod tests {
 #[cfg(test)]
 pub mod test_helpers {
     use crate::engine::ast::Ast;
-    use crate::engine::number::Number;
+    use crate::engine::number::test_helpers::num;
     use crate::engine::operator::OperatorType;
 
     pub fn num_node(value: &str) -> Ast {
-        Ast::Number(Number::from_str(value).unwrap())
+        Ast::Number(num(value))
     }
 
     pub fn mul_node(lhs: Ast, rhs: Ast) -> Ast {
         Ast::Operator(OperatorType::Multiplication, Box::new(lhs), Box::new(rhs))
+    }
+
+    pub fn div_node(lhs: Ast, rhs: Ast) -> Ast {
+        Ast::Operator(OperatorType::Division, Box::new(lhs), Box::new(rhs))
     }
 
     pub fn add_node(lhs: Ast, rhs: Ast) -> Ast {

@@ -48,6 +48,7 @@ mod tests {
     #[case("invalid")]
     #[case("1+")]
     #[case("1+×1")]
+    #[case("1×÷1")]
     #[case("1××1")]
     fn test_should_fail_when_expression_is_invalid(#[case] expr: &str) {
         assert!(matches!(evaluate(expr), Err(Error::InvalidExpression(_))));
@@ -76,12 +77,13 @@ mod tests {
     #[rstest]
     #[case("123", "123")]
     #[case("18+1.48", "19.48")]
-    #[case(" 1+\t2+    3+4 ", "10")]
+    #[case(" +1+\t2+    3+4 ", "10")]
     #[case("1+2-4", "-1")]
     #[case("1+2×4.5", "10")]
     #[case("13×24-54-52-45×37×90+63", "-149581")]
     #[case("91×59×41×88×21+69+67×8", "406798997")]
     #[case("1+2×-3", "-5")]
+    #[case("42×59×70-+-+14÷78-24÷25×-+79", "173536.0194871795")]
     fn test_should_evaluate_valid_expressions(#[case] expr: &str, #[case] result: &str) {
         assert_eq!(evaluate(expr), Ok(result.to_string()));
     }

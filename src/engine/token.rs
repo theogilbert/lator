@@ -1,7 +1,6 @@
-use std::collections::HashMap;
-
 use lazy_static::lazy_static;
 use regex::Regex;
+use std::collections::HashMap;
 
 use crate::engine::operator::OperatorType;
 
@@ -14,7 +13,7 @@ pub enum TokenType {
     Whitespace,
     /// Classifies a token as either an integer or a decimal numeral.
     Number,
-    /// Classifies a token as a '+' sign operator.
+    /// Classifies a token as an operator sign.
     Operator(OperatorType),
 }
 
@@ -74,27 +73,16 @@ pub fn tokenize(expression: &str) -> Vec<Token> {
 lazy_static! {
     /// TOKEN_PATTERNS represent the list of tokens parseable from the parser.
     static ref TOKEN_PATTERNS: HashMap<TokenType, Regex> = HashMap::from([
-        (
-            TokenType::Whitespace,
-            Regex::new(r"^\s+").unwrap()
-        ),
-        (
-            TokenType::Number,
-            Regex::new(r"(\d+(\.\d*)?)|^(\.\d+)").unwrap()
-        ),
-        (
-            TokenType::Operator(OperatorType::Addition),
-            Regex::new(r"\+").unwrap()
-        ),
-        (
-            TokenType::Operator(OperatorType::Subtraction),
-            Regex::new(r"-").unwrap()
-        ),
-        (
-            TokenType::Operator(OperatorType::Multiplication),
-            Regex::new(r"×").unwrap()
-        ),
-    ]);
+        (TokenType::Whitespace, r"^\s+"),
+        (TokenType::Number, r"(\d+(\.\d*)?)|^(\.\d+)"),
+        (TokenType::Operator(OperatorType::Addition), r"\+"),
+        (TokenType::Operator(OperatorType::Subtraction), "-"),
+        (TokenType::Operator(OperatorType::Multiplication), "×"),
+        (TokenType::Operator(OperatorType::Division), "÷"),
+    ])
+    .into_iter()
+    .map(|(token_type, re_expr)| (token_type, Regex::new(re_expr).unwrap()))
+    .collect();
 }
 
 /// Produce a token starting from the start of the given expression.\
@@ -179,6 +167,7 @@ mod tests {
     #[case("+", OperatorType::Addition)]
     #[case("-", OperatorType::Subtraction)]
     #[case("×", OperatorType::Multiplication)]
+    #[case("÷", OperatorType::Division)]
     fn should_evaluate_operator_as_valid_token(#[case] expr: &str, #[case] op_type: OperatorType) {
         assert_eq!(
             vec![str_to_token(expr, TokenType::Operator(op_type))],
@@ -219,10 +208,6 @@ pub mod test_helpers {
     use crate::engine::operator::OperatorType;
     use crate::engine::token::{Token, TokenType};
 
-    const ADD_CHAR: &'static str = "+";
-    const SUB_CHAR: &'static str = "-";
-    const MUL_CHAR: &'static str = "×";
-
     pub fn invalid_token(content: &str) -> Token {
         Token::new(TokenType::Invalid, content)
     }
@@ -236,14 +221,17 @@ pub mod test_helpers {
     }
 
     pub fn add_token() -> Token<'static> {
-        Token::new(TokenType::Operator(OperatorType::Addition), ADD_CHAR)
+        let operator_type = OperatorType::Addition;
+        Token::new(TokenType::Operator(operator_type), operator_type.as_str())
     }
 
     pub fn sub_token() -> Token<'static> {
-        Token::new(TokenType::Operator(OperatorType::Subtraction), SUB_CHAR)
+        let operator_type = OperatorType::Subtraction;
+        Token::new(TokenType::Operator(operator_type), operator_type.as_str())
     }
 
     pub fn mul_token() -> Token<'static> {
-        Token::new(TokenType::Operator(OperatorType::Multiplication), MUL_CHAR)
+        let operator_type = OperatorType::Multiplication;
+        Token::new(TokenType::Operator(operator_type), operator_type.as_str())
     }
 }

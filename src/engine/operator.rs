@@ -1,4 +1,4 @@
-use std::fmt::{Display, Formatter, Write};
+use std::fmt::{Display, Formatter};
 
 /// Describes an operation to perform on values.
 #[derive(Eq, PartialEq, Debug, Copy, Clone, Hash)]
@@ -6,6 +6,7 @@ pub enum OperatorType {
     Addition,
     Subtraction,
     Multiplication,
+    Division,
 }
 
 impl OperatorType {
@@ -16,19 +17,24 @@ impl OperatorType {
             OperatorType::Addition => 0,
             OperatorType::Subtraction => 0,
             OperatorType::Multiplication => 1,
+            OperatorType::Division => 1,
+        }
+    }
+
+    /// Returns a textual representation of the operator type.
+    pub const fn as_str(&self) -> &'static str {
+        match self {
+            OperatorType::Addition => "+",
+            OperatorType::Subtraction => "-",
+            OperatorType::Multiplication => "×",
+            OperatorType::Division => "÷",
         }
     }
 }
 
 impl Display for OperatorType {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let repr = match self {
-            OperatorType::Addition => '+',
-            OperatorType::Subtraction => '-',
-            OperatorType::Multiplication => '×',
-        };
-
-        f.write_char(repr)
+        f.write_str(self.as_str())
     }
 }
 
