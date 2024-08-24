@@ -1,7 +1,6 @@
-use std::collections::HashMap;
-
 use lazy_static::lazy_static;
 use regex::Regex;
+use std::collections::HashMap;
 
 use crate::engine::operator::OperatorType;
 
@@ -209,10 +208,6 @@ pub mod test_helpers {
     use crate::engine::operator::OperatorType;
     use crate::engine::token::{Token, TokenType};
 
-    const ADD_CHAR: &'static str = "+";
-    const SUB_CHAR: &'static str = "-";
-    const MUL_CHAR: &'static str = "×";
-
     pub fn invalid_token(content: &str) -> Token {
         Token::new(TokenType::Invalid, content)
     }
@@ -226,14 +221,17 @@ pub mod test_helpers {
     }
 
     pub fn add_token() -> Token<'static> {
-        Token::new(TokenType::Operator(OperatorType::Addition), ADD_CHAR)
+        let operator_type = OperatorType::Addition;
+        Token::new(TokenType::Operator(operator_type), operator_type.as_str())
     }
 
     pub fn sub_token() -> Token<'static> {
-        Token::new(TokenType::Operator(OperatorType::Subtraction), SUB_CHAR)
+        let operator_type = OperatorType::Subtraction;
+        Token::new(TokenType::Operator(operator_type), operator_type.as_str())
     }
 
     pub fn mul_token() -> Token<'static> {
-        Token::new(TokenType::Operator(OperatorType::Multiplication), MUL_CHAR)
+        let operator_type = OperatorType::Multiplication;
+        Token::new(TokenType::Operator(operator_type), operator_type.as_str())
     }
 }
