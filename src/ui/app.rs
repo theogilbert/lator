@@ -108,7 +108,7 @@ impl InputPanel {
     }
 
     fn replace_symbols_in_text(text: &str) -> String {
-        text.replace("*", "×")
+        text.replace("*", "×").replace("/", "÷")
     }
 
     fn show_and_ret_submitted_expr(
