@@ -14,7 +14,7 @@ pub enum TokenType {
     Whitespace,
     /// Classifies a token as either an integer or a decimal numeral.
     Number,
-    /// Classifies a token as a '+' sign operator.
+    /// Classifies a token as an operator sign.
     Operator(OperatorType),
 }
 
@@ -74,31 +74,16 @@ pub fn tokenize(expression: &str) -> Vec<Token> {
 lazy_static! {
     /// TOKEN_PATTERNS represent the list of tokens parseable from the parser.
     static ref TOKEN_PATTERNS: HashMap<TokenType, Regex> = HashMap::from([
-        (
-            TokenType::Whitespace,
-            Regex::new(r"^\s+").unwrap()
-        ),
-        (
-            TokenType::Number,
-            Regex::new(r"(\d+(\.\d*)?)|^(\.\d+)").unwrap()
-        ),
-        (
-            TokenType::Operator(OperatorType::Addition),
-            Regex::new(r"\+").unwrap()
-        ),
-        (
-            TokenType::Operator(OperatorType::Subtraction),
-            Regex::new(r"-").unwrap()
-        ),
-        (
-            TokenType::Operator(OperatorType::Multiplication),
-            Regex::new(r"×").unwrap()
-        ),
-        (
-            TokenType::Operator(OperatorType::Division),
-            Regex::new(r"÷").unwrap()
-        ),
-    ]);
+        (TokenType::Whitespace, r"^\s+"),
+        (TokenType::Number, r"(\d+(\.\d*)?)|^(\.\d+)"),
+        (TokenType::Operator(OperatorType::Addition), r"\+"),
+        (TokenType::Operator(OperatorType::Subtraction), "-"),
+        (TokenType::Operator(OperatorType::Multiplication), "×"),
+        (TokenType::Operator(OperatorType::Division), "÷"),
+    ])
+    .into_iter()
+    .map(|(token_type, re_expr)| (token_type, Regex::new(re_expr).unwrap()))
+    .collect();
 }
 
 /// Produce a token starting from the start of the given expression.\
