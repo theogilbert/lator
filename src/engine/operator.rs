@@ -6,6 +6,7 @@ pub enum OperatorType {
     Addition,
     Subtraction,
     Multiplication,
+    Division,
 }
 
 impl OperatorType {
@@ -16,6 +17,7 @@ impl OperatorType {
             OperatorType::Addition => 0,
             OperatorType::Subtraction => 0,
             OperatorType::Multiplication => 1,
+            OperatorType::Division => 1,
         }
     }
 }
@@ -26,6 +28,7 @@ impl Display for OperatorType {
             OperatorType::Addition => '+',
             OperatorType::Subtraction => '-',
             OperatorType::Multiplication => '×',
+            OperatorType::Division => '÷',
         };
 
         f.write_char(repr)

@@ -51,6 +51,7 @@ impl OperatorType {
             OperatorType::Addition => lhs + rhs,
             OperatorType::Subtraction => lhs - rhs,
             OperatorType::Multiplication => lhs * rhs,
+            OperatorType::Division => unimplemented!(),
         }
     }
 }
