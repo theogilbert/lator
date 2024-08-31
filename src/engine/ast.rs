@@ -124,10 +124,6 @@ pub mod test_helpers {
         Ast::Operator(OperatorType::Addition, Box::new(lhs), Box::new(rhs))
     }
 
-    pub fn sub_node(lhs: Ast, rhs: Ast) -> Ast {
-        Ast::Operator(OperatorType::Subtraction, Box::new(lhs), Box::new(rhs))
-    }
-
     pub fn neg_node(value: Ast) -> Ast {
         Ast::Negative(Box::new(value))
     }

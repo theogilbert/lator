@@ -249,4 +249,9 @@ pub mod test_helpers {
         let operator_type = OperatorType::Multiplication;
         Token::new(TokenType::Operator(operator_type), operator_type.as_str())
     }
+
+    pub fn div_token() -> Token<'static> {
+        let operator_type = OperatorType::Division;
+        Token::new(TokenType::Operator(operator_type), operator_type.as_str())
+    }
 }
