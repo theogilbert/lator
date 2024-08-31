@@ -31,7 +31,7 @@ pub fn parse(tokens: &[Token]) -> Result<Ast, Error> {
 /// of different operators.
 fn build_naive_tree(tokens: &[Token]) -> Result<Ast, Error> {
     let mut cursor: usize = 0;
-    let mut parsing_context = ParsingContext::Empty;
+    let mut parsing_context = State::Empty;
 
     for token in tokens.iter() {
         parsing_context = parsing_context
@@ -41,19 +41,19 @@ fn build_naive_tree(tokens: &[Token]) -> Result<Ast, Error> {
     }
 
     match parsing_context {
-        ParsingContext::Value(ast) => Ok(ast),
-        ParsingContext::Empty => Err(Error::EmptyExpression()),
-        ParsingContext::PendingOperation(_, _, _) => {
+        State::Value(ast) => Ok(ast),
+        State::Empty => Err(Error::EmptyExpression()),
+        State::PendingOperation(_, _, _) => {
             let op_position = find_position_of_unfinished_operator(tokens);
             Err(Error::InvalidExpression(op_position))
         }
-        ParsingContext::PendingSign(_) => Err(Error::InvalidExpression(0)),
+        State::PendingSign(_) => Err(Error::InvalidExpression(0)),
     }
 }
 
 /// This class represents the state of the parser while transforming a sequence of tokens forming
 /// an expression into an AST.
-enum ParsingContext {
+enum State {
     /// No tokens have been parsed yet. This is the initial state of the context.
     Empty,
     /// The value to be parsed will be a negative value.
@@ -67,10 +67,10 @@ enum ParsingContext {
     /// 3. The third field contains the parser used to build the right hand side value.
     ///
     /// The operation will be complete when the right hand side value is parsed.
-    PendingOperation(Ast, OperatorType, Box<ParsingContext>),
+    PendingOperation(Ast, OperatorType, Box<State>),
 }
 
-impl ParsingContext {
+impl State {
     fn update_from_next_token(self, token: &Token) -> Result<Self, ()> {
         match token.token_type() {
             TokenType::Invalid => Err(()),
@@ -82,7 +82,7 @@ impl ParsingContext {
         }
     }
 
-    fn update_from_number(self, num_text: &str) -> Result<ParsingContext, ()> {
+    fn update_from_number(self, num_text: &str) -> Result<State, ()> {
         let num_node = Ast::Number(Number::from_str(num_text)?);
 
         let resolvable_node: Ast = match self {
@@ -103,7 +103,7 @@ impl ParsingContext {
         Ast::Operator(op_type, Box::new(lhs), Box::new(num_node))
     }
 
-    fn update_from_operator(self, new_operator: OperatorType) -> Result<ParsingContext, ()> {
+    fn update_from_operator(self, new_operator: OperatorType) -> Result<State, ()> {
         match self {
             Self::Empty => Ok(Self::PendingSign(Sign::from_operator(new_operator)?)),
             Self::PendingSign(sign) => {
@@ -113,7 +113,7 @@ impl ParsingContext {
             Self::Value(lhs) => Ok(Self::PendingOperation(
                 lhs,
                 new_operator,
-                Box::new(ParsingContext::Empty),
+                Box::new(State::Empty),
             )),
             Self::PendingOperation(lhs, op_type, mut rhs_parser) => {
                 rhs_parser = Box::new((*rhs_parser).update_from_operator(new_operator)?);
@@ -124,7 +124,7 @@ impl ParsingContext {
 
     fn into_value(self) -> Result<Ast, ()> {
         match self {
-            ParsingContext::Value(val) => Ok(val),
+            State::Value(val) => Ok(val),
             _ => Err(()),
         }
     }
