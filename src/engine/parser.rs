@@ -35,7 +35,7 @@ fn build_naive_tree(tokens: &[Token]) -> Result<Ast, Error> {
 
     for token in tokens.iter() {
         let result = match token.token_type() {
-            TokenType::OpenParenthesis => Ok(states.open_parenthesis()),
+            TokenType::OpenParenthesis => Ok(states.open_parenthesis(cursor)),
             TokenType::CloseParenthesis => states.close_parenthesis(),
             _ => states.update_from_token(token),
         };
@@ -53,13 +53,25 @@ fn build_naive_tree(tokens: &[Token]) -> Result<Ast, Error> {
 /// When closing a parenthesis, the AST built from within the parenthesis can then be added to the
 /// parsing State from before the opening parenthesis.
 struct NestedStates {
-    states: Vec<State>,
+    states: Vec<MarkedState>,
+}
+
+/// A MarkedState associates a position to the beginning of a [State].
+struct MarkedState {
+    position: usize,
+    value: State,
+}
+
+impl MarkedState {
+    fn new(position: usize, value: State) -> Self {
+        Self { position, value }
+    }
 }
 
 impl Default for NestedStates {
     fn default() -> Self {
-        NestedStates {
-            states: vec![State::Empty],
+        Self {
+            states: vec![MarkedState::new(0, State::Empty)],
         }
     }
 }
@@ -69,12 +81,12 @@ impl NestedStates {
         self.transform_current_state(|state| state.update_from_next_token(token))
     }
 
-    fn open_parenthesis(&mut self) {
-        self.states.push(State::Empty);
+    fn open_parenthesis(&mut self, cursor: usize) {
+        self.states.push(MarkedState::new(cursor, State::Empty));
     }
 
     fn close_parenthesis(&mut self) -> Result<(), ()> {
-        let closed_sub_expr_state = self.states.pop().unwrap();
+        let closed_sub_expr_state = self.states.pop().unwrap().value;
         let ast = closed_sub_expr_state.into_value()?;
         let parenthesized = Ast::Parenthesized(Box::new(ast));
 
@@ -86,13 +98,20 @@ impl NestedStates {
         transform: impl FnOnce(State) -> Result<State, ()>,
     ) -> Result<(), ()> {
         let current_state = self.states.pop().unwrap();
-        let updated_state = transform(current_state)?;
-        self.states.push(updated_state);
+        let updated_state = transform(current_state.value)?;
+        let new_marked_state = MarkedState::new(current_state.position, updated_state);
+        self.states.push(new_marked_state);
         Ok(())
     }
 
     fn into_value(mut self, tokens: &[Token]) -> Result<Ast, Error> {
-        match self.states.pop().unwrap() {
+        let current_state = self.states.pop().unwrap();
+
+        if !self.states.is_empty() {
+            return Err(Error::InvalidExpression(current_state.position));
+        }
+
+        match current_state.value {
             State::Value(ast) => Ok(ast),
             State::Empty => Err(Error::EmptyExpression()),
             State::PendingOperation(_, _, _) => {
@@ -411,6 +430,18 @@ mod tests {
 
         let expected_tree = prioritized_node(num_node("1"));
         assert_eq!(Ok(expected_tree), parse(&seq));
+    }
+
+    #[rstest]
+    #[case(&[
+        num_token("1"), add_token(), open_par_token(), num_token("1")],
+        Error::InvalidExpression(2))
+    ]
+    fn test_parsing_expression_should_fail_when_parentheses_do_not_match(
+        #[case] seq: &[Token],
+        #[case] err: Error,
+    ) {
+        assert_eq!(Err(err), parse(&seq), "{:?}", seq);
     }
 }
 
