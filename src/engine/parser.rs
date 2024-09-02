@@ -86,6 +86,10 @@ impl NestedStates {
     }
 
     fn close_parenthesis(&mut self) -> Result<(), ()> {
+        if self.states.len() <= 1 {
+            return Err(());
+        }
+
         let closed_sub_expr_state = self.states.pop().unwrap().value;
         let ast = closed_sub_expr_state.into_value()?;
         let parenthesized = Ast::Parenthesized(Box::new(ast));
@@ -437,6 +441,7 @@ mod tests {
         num_token("1"), add_token(), open_par_token(), num_token("1")],
         Error::InvalidExpression(2))
     ]
+    #[case(&[num_token("1"), close_par_token()], Error::InvalidExpression(1))]
     fn test_parsing_expression_should_fail_when_parentheses_do_not_match(
         #[case] seq: &[Token],
         #[case] err: Error,
