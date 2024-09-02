@@ -448,6 +448,23 @@ mod tests {
     ) {
         assert_eq!(Err(err), parse(&seq), "{:?}", seq);
     }
+
+    #[test]
+    fn test_parsing_expression_should_fail_when_parenthesis_closes_on_pending_operation() {
+        let seq = [
+            open_par_token(),
+            num_token("1"),
+            add_token(),
+            close_par_token(),
+        ];
+        assert_eq!(Err(Error::InvalidExpression(3)), parse(&seq), "{:?}", seq);
+    }
+
+    #[test]
+    fn test_parsing_expression_should_fail_when_parentheses_englobe_nothing() {
+        let seq = [open_par_token(), close_par_token()];
+        assert_eq!(Err(Error::InvalidExpression(1)), parse(&seq), "{:?}", seq);
+    }
 }
 
 #[cfg(test)]
