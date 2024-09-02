@@ -31,23 +31,76 @@ pub fn parse(tokens: &[Token]) -> Result<Ast, Error> {
 /// of different operators.
 fn build_naive_tree(tokens: &[Token]) -> Result<Ast, Error> {
     let mut cursor: usize = 0;
-    let mut parsing_context = State::Empty;
+    let mut states = NestedStates::default();
 
     for token in tokens.iter() {
-        parsing_context = parsing_context
-            .update_from_next_token(token)
-            .map_err(|_| Error::InvalidExpression(cursor))?;
+        let result = match token.token_type() {
+            TokenType::OpenParenthesis => Ok(states.open_parenthesis()),
+            TokenType::CloseParenthesis => states.close_parenthesis(),
+            _ => states.update_from_token(token),
+        };
+
+        result.or(Err(Error::InvalidExpression(cursor)))?;
         cursor += token.length();
     }
 
-    match parsing_context {
-        State::Value(ast) => Ok(ast),
-        State::Empty => Err(Error::EmptyExpression()),
-        State::PendingOperation(_, _, _) => {
-            let op_position = find_position_of_unfinished_operator(tokens);
-            Err(Error::InvalidExpression(op_position))
+    states.into_value(tokens)
+}
+
+/// NestedStates provides a way to parse a new [AST] while keeping the currently parsed AST
+/// in memory.
+/// This allows us to start with a fresh parsing [State] when opening a new parenthesis.
+/// When closing a parenthesis, the AST built from within the parenthesis can then be added to the
+/// parsing State from before the opening parenthesis.
+struct NestedStates {
+    states: Vec<State>,
+}
+
+impl Default for NestedStates {
+    fn default() -> Self {
+        NestedStates {
+            states: vec![State::Empty],
         }
-        State::PendingSign(_) => Err(Error::InvalidExpression(0)),
+    }
+}
+
+impl NestedStates {
+    fn update_from_token(&mut self, token: &Token) -> Result<(), ()> {
+        self.transform_current_state(|state| state.update_from_next_token(token))
+    }
+
+    fn open_parenthesis(&mut self) {
+        self.states.push(State::Empty);
+    }
+
+    fn close_parenthesis(&mut self) -> Result<(), ()> {
+        let closed_sub_expr_state = self.states.pop().unwrap();
+        let ast = closed_sub_expr_state.into_value()?;
+        let parenthesized = Ast::Parenthesized(Box::new(ast));
+
+        self.transform_current_state(|state| state.update_from_value(parenthesized))
+    }
+
+    fn transform_current_state(
+        &mut self,
+        transform: impl FnOnce(State) -> Result<State, ()>,
+    ) -> Result<(), ()> {
+        let current_state = self.states.pop().unwrap();
+        let updated_state = transform(current_state)?;
+        self.states.push(updated_state);
+        Ok(())
+    }
+
+    fn into_value(mut self, tokens: &[Token]) -> Result<Ast, Error> {
+        match self.states.pop().unwrap() {
+            State::Value(ast) => Ok(ast),
+            State::Empty => Err(Error::EmptyExpression()),
+            State::PendingOperation(_, _, _) => {
+                let op_position = find_position_of_unfinished_operator(tokens);
+                Err(Error::InvalidExpression(op_position))
+            }
+            State::PendingSign(_) => Err(Error::InvalidExpression(0)),
+        }
     }
 }
 
@@ -56,7 +109,7 @@ fn build_naive_tree(tokens: &[Token]) -> Result<Ast, Error> {
 enum State {
     /// No tokens have been parsed yet. This is the initial state of the context.
     Empty,
-    /// The value to be parsed will be a negative value.
+    /// A sign has been parsed and will be added to the next value or expression.
     PendingSign(Sign),
     /// The parsed tokens resolve to a computable value.
     Value(Ast),
@@ -77,9 +130,22 @@ impl State {
             TokenType::Whitespace => Ok(self), // Whitespaces do not affect the parsing context.
             TokenType::Number => self.update_from_number(token.content()),
             TokenType::Operator(op_type) => self.update_from_operator(op_type),
-            TokenType::OpenParenthesis => Err(()),
-            TokenType::CloseParenthesis => Err(()),
+            TokenType::OpenParenthesis | TokenType::CloseParenthesis => Err(()),
         }
+    }
+
+    fn update_from_value(self, ast: Ast) -> Result<Self, ()> {
+        let new_value = match self {
+            Self::Empty | Self::PendingSign(Sign::Positive) => Ok(ast),
+            Self::PendingSign(Sign::Negative) => Ok(Ast::Negative(Box::new(ast))),
+            Self::Value(_) => Err(()),
+            Self::PendingOperation(lhs, op_type, rhs) => {
+                let updated_rhs = (*rhs).update_from_value(ast)?;
+                Self::build_operation_node(lhs, op_type, updated_rhs.into_value()?)
+            }
+        }?;
+
+        Ok(Self::Value(new_value))
     }
 
     fn update_from_number(self, num_text: &str) -> Result<State, ()> {
@@ -91,35 +157,30 @@ impl State {
             Self::Value(_) => Err(()),
             Self::PendingOperation(lhs, op_type, rhs_parser) => {
                 let new_rhs_parser = (*rhs_parser).update_from_number(num_text)?;
-                let ope = Self::build_operation_node(lhs, op_type, new_rhs_parser.into_value()?);
-                Ok(ope)
+                Self::build_operation_node(lhs, op_type, new_rhs_parser.into_value()?)
             }
         }?;
 
         Ok(Self::Value(resolvable_node))
     }
 
-    fn build_operation_node(lhs: Ast, op_type: OperatorType, num_node: Ast) -> Ast {
-        Ast::Operator(op_type, Box::new(lhs), Box::new(num_node))
+    fn build_operation_node(lhs: Ast, op_type: OperatorType, num_node: Ast) -> Result<Ast, ()> {
+        Ok(Ast::Operator(op_type, Box::new(lhs), Box::new(num_node)))
     }
 
     fn update_from_operator(self, new_operator: OperatorType) -> Result<State, ()> {
-        match self {
-            Self::Empty => Ok(Self::PendingSign(Sign::from_operator(new_operator)?)),
+        Ok(match self {
+            Self::Empty => Self::PendingSign(Sign::from_operator(new_operator)?),
             Self::PendingSign(sign) => {
                 let new_sign = Sign::from_operator(new_operator)?;
-                Ok(Self::PendingSign(sign.combine(new_sign)))
+                Self::PendingSign(sign.combine(new_sign))
             }
-            Self::Value(lhs) => Ok(Self::PendingOperation(
-                lhs,
-                new_operator,
-                Box::new(State::Empty),
-            )),
+            Self::Value(lhs) => Self::PendingOperation(lhs, new_operator, Box::new(State::Empty)),
             Self::PendingOperation(lhs, op_type, mut rhs_parser) => {
                 rhs_parser = Box::new((*rhs_parser).update_from_operator(new_operator)?);
-                Ok(Self::PendingOperation(lhs, op_type, rhs_parser))
+                Self::PendingOperation(lhs, op_type, rhs_parser)
             }
-        }
+        })
     }
 
     fn into_value(self) -> Result<Ast, ()> {
@@ -169,9 +230,9 @@ fn prioritize_operators(naive_tree: Ast) -> Ast {
 
             operator.into_ast()
         }
-        Ast::Prioritized(value) => {
+        Ast::Parenthesized(value) => {
             let prioritized_subtree = prioritize_operators(*value);
-            Ast::Prioritized(Box::new(prioritized_subtree))
+            Ast::Parenthesized(Box::new(prioritized_subtree))
         }
     }
 }
@@ -241,7 +302,7 @@ mod tests {
     use crate::engine::ast::test_helpers::*;
     use crate::engine::parser::parse;
     use crate::engine::token::test_helpers::{
-        add_token, div_token, mul_token, num_token, sub_token,
+        add_token, close_par_token, div_token, mul_token, num_token, open_par_token, sub_token,
     };
     use crate::engine::token::Token;
     use crate::engine::Error;
@@ -343,6 +404,14 @@ mod tests {
         let seq = [num_token("1"), add_token()];
         assert_eq!(Err(Error::InvalidExpression(1)), parse(&seq));
     }
+
+    #[test]
+    fn test_parsing_parenthesized_expression_should_produce_prioritized_node() {
+        let seq = [open_par_token(), num_token("1"), close_par_token()];
+
+        let expected_tree = prioritized_node(num_node("1"));
+        assert_eq!(Ok(expected_tree), parse(&seq));
+    }
 }
 
 #[cfg(test)]
@@ -424,7 +493,7 @@ mod test_prioritization {
                 assert_subtree_is_prioritized(*lhs);
                 assert_subtree_is_prioritized(*rhs);
             }
-            Ast::Prioritized(value) => assert_subtree_is_prioritized(*value),
+            Ast::Parenthesized(value) => assert_subtree_is_prioritized(*value),
         }
     }
 
@@ -433,7 +502,7 @@ mod test_prioritization {
             Ast::Number(_) => usize::MAX,
             Ast::Operator(op_type, _, _) => op_type.priority(),
             Ast::Negative(value) => node_priority(value),
-            Ast::Prioritized(_) => usize::MAX,
+            Ast::Parenthesized(_) => usize::MAX,
         }
     }
 

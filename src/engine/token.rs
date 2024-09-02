@@ -254,4 +254,12 @@ pub mod test_helpers {
         let operator_type = OperatorType::Division;
         Token::new(TokenType::Operator(operator_type), operator_type.as_str())
     }
+
+    pub fn open_par_token() -> Token<'static> {
+        Token::new(TokenType::OpenParenthesis, "(")
+    }
+
+    pub fn close_par_token() -> Token<'static> {
+        Token::new(TokenType::CloseParenthesis, ")")
+    }
 }
