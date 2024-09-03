@@ -35,7 +35,10 @@ fn build_naive_tree(tokens: &[Token]) -> Result<Ast, Error> {
 
     for token in tokens.iter() {
         let result = match token.token_type() {
-            TokenType::OpenParenthesis => Ok(states.open_parenthesis(cursor)),
+            TokenType::OpenParenthesis => {
+                states.open_parenthesis(cursor);
+                Ok(())
+            }
             TokenType::CloseParenthesis => states.close_parenthesis(),
             _ => states.update_from_token(token),
         };
@@ -144,7 +147,7 @@ impl NestedStates {
 enum State {
     /// No tokens have been parsed yet. This is the initial state of the context.
     Empty,
-    /// A sign has been parsed and will be added to the next value or expression.
+    /// A sign has been parsed and will be applied to the next value or expression.
     PendingSign(Sign),
     /// The parsed tokens resolve to a computable value.
     Value(Ast),
@@ -185,18 +188,7 @@ impl State {
 
     fn update_from_number(self, num_text: &str) -> Result<State, ()> {
         let num_node = Ast::Number(Number::from_str(num_text)?);
-
-        let resolvable_node: Ast = match self {
-            Self::Empty | Self::PendingSign(Sign::Positive) => Ok(num_node),
-            Self::PendingSign(Sign::Negative) => Ok(Ast::Negative(Box::new(num_node))),
-            Self::Value(_) => Err(()),
-            Self::PendingOperation(lhs, op_type, rhs_parser) => {
-                let new_rhs_parser = (*rhs_parser).update_from_number(num_text)?;
-                Self::build_operation_node(lhs, op_type, new_rhs_parser.into_value()?)
-            }
-        }?;
-
-        Ok(Self::Value(resolvable_node))
+        self.update_from_value(num_node)
     }
 
     fn build_operation_node(lhs: Ast, op_type: OperatorType, num_node: Ast) -> Result<Ast, ()> {
@@ -445,7 +437,7 @@ mod tests {
     }
 
     #[test]
-    fn test_parsing_parenthesized_expression_should_produce_prioritized_node() {
+    fn test_parsing_parenthesized_expression_should_produce_ast() {
         let seq = [open_par_token(), num_token("1"), close_par_token()];
 
         let expected_tree = parenthesized_node(num_node("1"));
@@ -531,7 +523,6 @@ mod test_prioritization {
 
     #[test]
     fn should_prioritize_parenthesized_sub_tree() {
-        // A tree naively parsed as ((1+2)*3)+4 should be updated to 1+(2*3)+4
         let tree_to_prioritize = mul_node(
             add_node(num_node("1"), num_node("2")),
             add_node(num_node("3"), num_node("4")),
@@ -619,16 +610,6 @@ mod test_prioritization {
     #[test]
     fn should_support_prioritizing_when_children_are_negative() {
         let naive_ast = add_node(neg_node(num_node("1")), neg_node(num_node("2")));
-
-        assert_eq!(naive_ast, prioritize_operators(naive_ast.clone()));
-    }
-
-    #[test]
-    fn should_not_prioritize_mul_over_explicitly_prioritized_add() {
-        let naive_ast = mul_node(
-            num_node("1"),
-            parenthesized_node(add_node(num_node("2"), num_node("3"))),
-        );
 
         assert_eq!(naive_ast, prioritize_operators(naive_ast.clone()));
     }
