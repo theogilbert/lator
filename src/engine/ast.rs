@@ -65,7 +65,7 @@ impl OperatorType {
 mod tests {
     use rstest::rstest;
 
-    use crate::engine::ast::test_helpers::{add_node, neg_node, num_node, prioritized_node};
+    use crate::engine::ast::test_helpers::{add_node, neg_node, num_node, parenthesized_node};
 
     #[rstest]
     #[case("0")]
@@ -96,7 +96,7 @@ mod tests {
 
     #[test]
     fn should_return_original_value_when_prioritized() {
-        let ast = prioritized_node(num_node("10"));
+        let ast = parenthesized_node(num_node("10"));
         assert_eq!(ast.resolve().to_string(), "10")
     }
 }
@@ -128,7 +128,7 @@ pub mod test_helpers {
         Ast::Negative(Box::new(value))
     }
 
-    pub fn prioritized_node(value: Ast) -> Ast {
+    pub fn parenthesized_node(value: Ast) -> Ast {
         Ast::Parenthesized(Box::new(value))
     }
 }

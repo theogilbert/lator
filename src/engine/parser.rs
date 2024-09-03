@@ -432,7 +432,7 @@ mod tests {
     fn test_parsing_parenthesized_expression_should_produce_prioritized_node() {
         let seq = [open_par_token(), num_token("1"), close_par_token()];
 
-        let expected_tree = prioritized_node(num_node("1"));
+        let expected_tree = parenthesized_node(num_node("1"));
         assert_eq!(Ok(expected_tree), parse(&seq));
     }
 
@@ -513,6 +513,31 @@ mod test_prioritization {
         prioritize_and_check_tree(original_tree);
     }
 
+    #[test]
+    fn should_prioritize_parenthesized_sub_tree() {
+        // A tree naively parsed as ((1+2)*3)+4 should be updated to 1+(2*3)+4
+        let tree_to_prioritize = mul_node(
+            add_node(num_node("1"), num_node("2")),
+            add_node(num_node("3"), num_node("4")),
+        );
+        let parent_tree = add_node(num_node("4"), parenthesized_node(tree_to_prioritize));
+
+        prioritize_and_check_tree(parent_tree);
+    }
+
+    #[test]
+    fn should_not_swap_parenthesized_operator_with_parent() {
+        // A tree naively parsed as ((1+2)*3)+4 should be updated to 1+(2*3)+4
+        let ast = mul_node(
+            parenthesized_node(add_node(num_node("1"), num_node("2"))),
+            num_node("5"),
+        );
+
+        let new_ast = prioritize_operators(ast.clone());
+
+        assert_eq!(ast, new_ast);
+    }
+
     fn prioritize_and_check_tree(original_tree: Ast) {
         let original_repr = original_tree.to_string();
 
@@ -570,7 +595,7 @@ mod test_prioritization {
     fn should_not_prioritize_mul_over_explicitly_prioritized_add() {
         let naive_ast = mul_node(
             num_node("1"),
-            prioritized_node(add_node(num_node("2"), num_node("3"))),
+            parenthesized_node(add_node(num_node("2"), num_node("3"))),
         );
 
         assert_eq!(naive_ast, prioritize_operators(naive_ast.clone()));
