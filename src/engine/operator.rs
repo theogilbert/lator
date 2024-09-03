@@ -55,6 +55,7 @@ impl Sign {
         }
     }
 
+    /// Compute the value of a sign after combining two signs together.
     pub fn combine(self, other: Sign) -> Self {
         if self == other {
             Self::Positive

@@ -49,14 +49,14 @@ fn build_naive_tree(tokens: &[Token]) -> Result<Ast, Error> {
 
 /// NestedStates provides a way to parse a new [AST] while keeping the currently parsed AST
 /// in memory.
-/// This allows us to start with a fresh parsing [State] when opening a new parenthesis.
-/// When closing a parenthesis, the AST built from within the parenthesis can then be added to the
-/// parsing State from before the opening parenthesis.
+/// This allows us to start with a fresh parser [State] when opening a new parenthesis.
+/// When closing a parenthesis, the AST built from within these parentheses can then be added to the
+/// previous parsing State.
 struct NestedStates {
     states: Vec<MarkedState>,
 }
 
-/// A MarkedState associates a position to the beginning of a [State].
+/// A MarkedState associates the position, in an expression, from which a [State] was initialized.
 struct MarkedState {
     position: usize,
     value: State,
@@ -97,6 +97,8 @@ impl NestedStates {
         self.transform_current_state(|state| state.update_from_value(parenthesized))
     }
 
+    /// Apply a function to update the [State] corresponding to the expression currently being
+    /// parsed.
     fn transform_current_state(
         &mut self,
         transform: impl FnOnce(State) -> Result<State, ()>,
@@ -108,10 +110,16 @@ impl NestedStates {
         Ok(())
     }
 
+    /// Transforms the [NestedStates] into an [AST].
+    /// This operation will fail if the [NestedStates] is not in a valid state (e.g. a parenthesis
+    /// has not been closed, or an operation is not complete).
     fn into_value(mut self, tokens: &[Token]) -> Result<Ast, Error> {
         let current_state = self.states.pop().unwrap();
 
         if !self.states.is_empty() {
+            // After popping the current state, no other state should be remaining in this
+            // structure. Otherwise, that would mean that the current state corresponds to a
+            // sub-expression (i.e. a parenthesis has not been closed).
             return Err(Error::InvalidExpression(current_state.position));
         }
 
@@ -129,6 +137,10 @@ impl NestedStates {
 
 /// This class represents the state of the parser while transforming a sequence of tokens forming
 /// an expression into an AST.
+///
+/// A State structure cannot parse opening or closing parenthesis tokens. It should only be fed
+/// simple expressions (numbers and operators).
+/// To handle parenthesis tokens, see [NestedStates].
 enum State {
     /// No tokens have been parsed yet. This is the initial state of the context.
     Empty,
