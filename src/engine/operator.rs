@@ -40,6 +40,7 @@ impl Display for OperatorType {
 
 /// Describes either a positive `+` or negative `-` sign which can be present in front of
 /// an expression.
+#[derive(Eq, PartialEq)]
 pub enum Sign {
     Positive,
     Negative,
@@ -54,10 +55,12 @@ impl Sign {
         }
     }
 
-    pub fn is_negative(&self) -> bool {
-        match &self {
-            Sign::Positive => false,
-            Sign::Negative => true,
+    /// Compute the value of a sign after combining two signs together.
+    pub fn combine(self, other: Sign) -> Self {
+        if self == other {
+            Self::Positive
+        } else {
+            Self::Negative
         }
     }
 }

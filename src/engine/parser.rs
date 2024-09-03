@@ -31,92 +31,190 @@ pub fn parse(tokens: &[Token]) -> Result<Ast, Error> {
 /// of different operators.
 fn build_naive_tree(tokens: &[Token]) -> Result<Ast, Error> {
     let mut cursor: usize = 0;
-    let mut parsing_context = ParsingContext::Empty;
+    let mut states = NestedStates::default();
 
     for token in tokens.iter() {
-        parsing_context = parsing_context
-            .update_from_next_token(token)
-            .map_err(|_| Error::InvalidExpression(cursor))?;
+        let result = match token.token_type() {
+            TokenType::OpenParenthesis => {
+                states.open_parenthesis(cursor);
+                Ok(())
+            }
+            TokenType::CloseParenthesis => states.close_parenthesis(),
+            _ => states.update_from_token(token),
+        };
+
+        result.or(Err(Error::InvalidExpression(cursor)))?;
         cursor += token.length();
     }
 
-    match parsing_context {
-        ParsingContext::Value(ast) => Ok(ast),
-        ParsingContext::Empty => Err(Error::EmptyExpression()),
-        ParsingContext::PendingOperation(_, _, _) => {
-            let op_position = find_position_of_unfinished_operator(tokens);
-            Err(Error::InvalidExpression(op_position))
+    states.into_value(tokens)
+}
+
+/// NestedStates provides a way to parse a new [AST] while keeping the currently parsed AST
+/// in memory.
+/// This allows us to start with a fresh parser [State] when opening a new parenthesis.
+/// When closing a parenthesis, the AST built from within these parentheses can then be added to the
+/// previous parsing State.
+struct NestedStates {
+    states: Vec<MarkedState>,
+}
+
+/// A MarkedState associates the position, in an expression, from which a [State] was initialized.
+struct MarkedState {
+    position: usize,
+    value: State,
+}
+
+impl MarkedState {
+    fn new(position: usize, value: State) -> Self {
+        Self { position, value }
+    }
+}
+
+impl Default for NestedStates {
+    fn default() -> Self {
+        Self {
+            states: vec![MarkedState::new(0, State::Empty)],
         }
     }
 }
 
-/// This class represents the state of the parser while transforming a sequence of tokens
-/// into an AST.
-enum ParsingContext {
+impl NestedStates {
+    fn update_from_token(&mut self, token: &Token) -> Result<(), ()> {
+        self.transform_current_state(|state| state.update_from_next_token(token))
+    }
+
+    fn open_parenthesis(&mut self, cursor: usize) {
+        self.states.push(MarkedState::new(cursor, State::Empty));
+    }
+
+    fn close_parenthesis(&mut self) -> Result<(), ()> {
+        if self.states.len() <= 1 {
+            return Err(());
+        }
+
+        let closed_sub_expr_state = self.states.pop().unwrap().value;
+        let ast = closed_sub_expr_state.into_value()?;
+        let parenthesized = Ast::Parenthesized(Box::new(ast));
+
+        self.transform_current_state(|state| state.update_from_value(parenthesized))
+    }
+
+    /// Apply a function to update the [State] corresponding to the expression currently being
+    /// parsed.
+    fn transform_current_state(
+        &mut self,
+        transform: impl FnOnce(State) -> Result<State, ()>,
+    ) -> Result<(), ()> {
+        let current_state = self.states.pop().unwrap();
+        let updated_state = transform(current_state.value)?;
+        let new_marked_state = MarkedState::new(current_state.position, updated_state);
+        self.states.push(new_marked_state);
+        Ok(())
+    }
+
+    /// Transforms the [NestedStates] into an [AST].
+    /// This operation will fail if the [NestedStates] is not in a valid state (e.g. a parenthesis
+    /// has not been closed, or an operation is not complete).
+    fn into_value(mut self, tokens: &[Token]) -> Result<Ast, Error> {
+        let current_state = self.states.pop().unwrap();
+
+        if !self.states.is_empty() {
+            // After popping the current state, no other state should be remaining in this
+            // structure. Otherwise, that would mean that the current state corresponds to a
+            // sub-expression (i.e. a parenthesis has not been closed).
+            return Err(Error::InvalidExpression(current_state.position));
+        }
+
+        match current_state.value {
+            State::Value(ast) => Ok(ast),
+            State::Empty => Err(Error::EmptyExpression()),
+            State::PendingOperation(_, _, _) => {
+                let op_position = find_position_of_unfinished_operator(tokens);
+                Err(Error::InvalidExpression(op_position))
+            }
+            State::PendingSign(_) => Err(Error::InvalidExpression(0)),
+        }
+    }
+}
+
+/// This class represents the state of the parser while transforming a sequence of tokens forming
+/// an expression into an AST.
+///
+/// A State structure cannot parse opening or closing parenthesis tokens. It should only be fed
+/// simple expressions (numbers and operators).
+/// To handle parenthesis tokens, see [NestedStates].
+enum State {
     /// No tokens have been parsed yet. This is the initial state of the context.
     Empty,
+    /// A sign has been parsed and will be applied to the next value or expression.
+    PendingSign(Sign),
     /// The parsed tokens resolve to a computable value.
     Value(Ast),
     /// An operation is pending, meaning that the last token which has been parsed is
     /// an operation sign.
     /// 1. The first field of this variant is the left hand side value.
     /// 2. The second field indicates the operation to perform on this value.
-    /// 3. The third field indicates if a negative sign should be applied
-    ///     to the right hand side value.
+    /// 3. The third field contains the parser used to build the right hand side value.
     ///
     /// The operation will be complete when the right hand side value is parsed.
-    PendingOperation(Ast, OperatorType, bool),
+    PendingOperation(Ast, OperatorType, Box<State>),
 }
 
-impl ParsingContext {
+impl State {
     fn update_from_next_token(self, token: &Token) -> Result<Self, ()> {
         match token.token_type() {
             TokenType::Invalid => Err(()),
             TokenType::Whitespace => Ok(self), // Whitespaces do not affect the parsing context.
             TokenType::Number => self.update_from_number(token.content()),
             TokenType::Operator(op_type) => self.update_from_operator(op_type),
+            TokenType::OpenParenthesis | TokenType::CloseParenthesis => Err(()),
         }
     }
 
-    fn update_from_number(self, num_text: &str) -> Result<ParsingContext, ()> {
-        let num_node = Ast::Number(Number::from_str(num_text)?);
-
-        let resolvable_node: Ast =
-            match self {
-                Self::Empty => Ok(num_node),
-                Self::Value(_) => Err(()),
-                Self::PendingOperation(lhs, op_type, negative_rhs) => Ok(
-                    Self::build_operation_node(lhs, op_type, negative_rhs, num_node),
-                ),
-            }?;
-
-        Ok(Self::Value(resolvable_node))
-    }
-
-    fn build_operation_node(lhs: Ast, op_type: OperatorType, neg_rhs: bool, num_node: Ast) -> Ast {
-        let mut rhs = Box::new(num_node);
-
-        if neg_rhs {
-            rhs = Box::new(Ast::Negative(rhs));
-        }
-
-        Ast::Operator(op_type, Box::new(lhs), rhs)
-    }
-
-    fn update_from_operator(self, new_operator: OperatorType) -> Result<ParsingContext, ()> {
-        match self {
-            Self::Empty => Self::init_context_from_operator(new_operator),
-            Self::Value(lhs) => Ok(Self::PendingOperation(lhs, new_operator, false)),
-            Self::PendingOperation(lhs, op_type, negative_rhs) => {
-                let negative_sign = negative_rhs ^ Sign::from_operator(new_operator)?.is_negative();
-                Ok(Self::PendingOperation(lhs, op_type, negative_sign))
+    fn update_from_value(self, ast: Ast) -> Result<Self, ()> {
+        let new_value = match self {
+            Self::Empty | Self::PendingSign(Sign::Positive) => Ok(ast),
+            Self::PendingSign(Sign::Negative) => Ok(Ast::Negative(Box::new(ast))),
+            Self::Value(_) => Err(()),
+            Self::PendingOperation(lhs, op_type, rhs) => {
+                let updated_rhs = (*rhs).update_from_value(ast)?;
+                Self::build_operation_node(lhs, op_type, updated_rhs.into_value()?)
             }
-        }
+        }?;
+
+        Ok(Self::Value(new_value))
     }
 
-    fn init_context_from_operator(op_type: OperatorType) -> Result<ParsingContext, ()> {
-        let zero_node = Ast::Number(Number::zero());
-        Ok(Self::PendingOperation(zero_node, op_type, false))
+    fn update_from_number(self, num_text: &str) -> Result<State, ()> {
+        let num_node = Ast::Number(Number::from_str(num_text)?);
+        self.update_from_value(num_node)
+    }
+
+    fn build_operation_node(lhs: Ast, op_type: OperatorType, num_node: Ast) -> Result<Ast, ()> {
+        Ok(Ast::Operator(op_type, Box::new(lhs), Box::new(num_node)))
+    }
+
+    fn update_from_operator(self, new_operator: OperatorType) -> Result<State, ()> {
+        Ok(match self {
+            Self::Empty => Self::PendingSign(Sign::from_operator(new_operator)?),
+            Self::PendingSign(sign) => {
+                let new_sign = Sign::from_operator(new_operator)?;
+                Self::PendingSign(sign.combine(new_sign))
+            }
+            Self::Value(lhs) => Self::PendingOperation(lhs, new_operator, Box::new(State::Empty)),
+            Self::PendingOperation(lhs, op_type, mut rhs_parser) => {
+                rhs_parser = Box::new((*rhs_parser).update_from_operator(new_operator)?);
+                Self::PendingOperation(lhs, op_type, rhs_parser)
+            }
+        })
+    }
+
+    fn into_value(self) -> Result<Ast, ()> {
+        match self {
+            State::Value(val) => Ok(val),
+            _ => Err(()),
+        }
     }
 }
 
@@ -147,7 +245,11 @@ fn find_position_of_unfinished_operator(tokens: &[Token]) -> usize {
 /// higher priority operators should end up deeper in the tree than lower priority operators.
 fn prioritize_operators(naive_tree: Ast) -> Ast {
     match naive_tree {
-        Ast::Number(_) | Ast::Negative(_) => naive_tree, // no further prioritization on these nodes
+        Ast::Number(_) => naive_tree, // no further prioritization on these nodes
+        Ast::Negative(value) => {
+            let prioritized_subtree = prioritize_operators(*value);
+            Ast::Negative(Box::new(prioritized_subtree))
+        }
         Ast::Operator(kind, lhs, rhs) => {
             let mut operator = Operator::new(kind, *lhs, *rhs);
 
@@ -158,6 +260,10 @@ fn prioritize_operators(naive_tree: Ast) -> Ast {
             operator = operator.reorder_with_right_branch();
 
             operator.into_ast()
+        }
+        Ast::Parenthesized(value) => {
+            let prioritized_subtree = prioritize_operators(*value);
+            Ast::Parenthesized(Box::new(prioritized_subtree))
         }
     }
 }
@@ -226,8 +332,12 @@ impl Operator {
 mod tests {
     use crate::engine::ast::test_helpers::*;
     use crate::engine::parser::parse;
-    use crate::engine::token::test_helpers::{add_token, mul_token, num_token, sub_token};
+    use crate::engine::token::test_helpers::{
+        add_token, close_par_token, div_token, mul_token, num_token, open_par_token, sub_token,
+    };
+    use crate::engine::token::Token;
     use crate::engine::Error;
+    use rstest::rstest;
 
     #[test]
     fn test_parsing_no_tokens_should_fail() {
@@ -242,7 +352,7 @@ mod tests {
     #[test]
     fn test_parsing_negative_number_should_produce_value_node() {
         let tokens = [sub_token(), num_token("1")];
-        let expected_tree = sub_node(num_node("0"), num_node("1"));
+        let expected_tree = neg_node(num_node("1"));
 
         // -1 is parsed into the tree (0-1)
         assert_eq!(Ok(expected_tree), parse(&tokens));
@@ -251,7 +361,7 @@ mod tests {
     #[test]
     fn test_parsing_positive_number_should_produce_value_node() {
         let tokens = [add_token(), num_token("1")];
-        let expected_tree = add_node(num_node("0"), num_node("1"));
+        let expected_tree = num_node("1");
 
         assert_eq!(Ok(expected_tree), parse(&tokens));
     }
@@ -300,6 +410,20 @@ mod tests {
         assert_eq!(Err(Error::InvalidExpression(0)), parse(&[add_token()]));
     }
 
+    #[rstest]
+    #[case(&[add_token(), num_token("1")])]
+    #[case(&[sub_token(), num_token("1")])]
+    fn test_parsing_sequence_starting_with_sign_should_succeed(#[case] seq: &[Token]) {
+        assert!(parse(seq).is_ok())
+    }
+
+    #[rstest]
+    #[case(&[mul_token(), num_token("1")])]
+    #[case(&[div_token(), num_token("1")])]
+    fn test_parsing_sequence_starting_with_non_sign_op_should_fail(#[case] seq: &[Token]) {
+        assert!(matches!(parse(seq), Err(Error::InvalidExpression(0))));
+    }
+
     #[test]
     fn test_parsing_sequence_with_adjacent_numbers_should_fail() {
         let seq = [num_token("1"), num_token("2")];
@@ -310,6 +434,44 @@ mod tests {
     fn test_parsing_sequence_ending_with_operator_should_fail() {
         let seq = [num_token("1"), add_token()];
         assert_eq!(Err(Error::InvalidExpression(1)), parse(&seq));
+    }
+
+    #[test]
+    fn test_parsing_parenthesized_expression_should_produce_ast() {
+        let seq = [open_par_token(), num_token("1"), close_par_token()];
+
+        let expected_tree = parenthesized_node(num_node("1"));
+        assert_eq!(Ok(expected_tree), parse(&seq));
+    }
+
+    #[rstest]
+    #[case(&[
+        num_token("1"), add_token(), open_par_token(), num_token("1")],
+        Error::InvalidExpression(2))
+    ]
+    #[case(&[num_token("1"), close_par_token()], Error::InvalidExpression(1))]
+    fn test_parsing_expression_should_fail_when_parentheses_do_not_match(
+        #[case] seq: &[Token],
+        #[case] err: Error,
+    ) {
+        assert_eq!(Err(err), parse(&seq), "{:?}", seq);
+    }
+
+    #[test]
+    fn test_parsing_expression_should_fail_when_parenthesis_closes_on_pending_operation() {
+        let seq = [
+            open_par_token(),
+            num_token("1"),
+            add_token(),
+            close_par_token(),
+        ];
+        assert_eq!(Err(Error::InvalidExpression(3)), parse(&seq), "{:?}", seq);
+    }
+
+    #[test]
+    fn test_parsing_expression_should_fail_when_parentheses_englobe_nothing() {
+        let seq = [open_par_token(), close_par_token()];
+        assert_eq!(Err(Error::InvalidExpression(1)), parse(&seq), "{:?}", seq);
     }
 }
 
@@ -359,6 +521,43 @@ mod test_prioritization {
         prioritize_and_check_tree(original_tree);
     }
 
+    #[test]
+    fn should_prioritize_parenthesized_sub_tree() {
+        let tree_to_prioritize = mul_node(
+            add_node(num_node("1"), num_node("2")),
+            add_node(num_node("3"), num_node("4")),
+        );
+        let parent_tree = add_node(num_node("4"), parenthesized_node(tree_to_prioritize));
+
+        prioritize_and_check_tree(parent_tree);
+    }
+
+    #[test]
+    fn should_prioritize_negative_parenthesized_sub_tree() {
+        let tree_to_prioritize = mul_node(
+            add_node(num_node("1"), num_node("2")),
+            add_node(num_node("3"), num_node("4")),
+        );
+        let parent_tree = add_node(
+            num_node("4"),
+            parenthesized_node(neg_node(tree_to_prioritize)),
+        );
+
+        prioritize_and_check_tree(parent_tree);
+    }
+
+    #[test]
+    fn should_not_swap_parenthesized_operator_with_parent() {
+        let ast = mul_node(
+            parenthesized_node(add_node(num_node("1"), num_node("2"))),
+            num_node("5"),
+        );
+
+        let new_ast = prioritize_operators(ast.clone());
+
+        assert_eq!(ast, new_ast);
+    }
+
     fn prioritize_and_check_tree(original_tree: Ast) {
         let original_repr = original_tree.to_string();
 
@@ -375,7 +574,8 @@ mod test_prioritization {
     /// their parents.
     fn assert_subtree_is_prioritized(ast: Ast) {
         match ast {
-            Ast::Number(_) | Ast::Negative(_) => {}
+            Ast::Number(_) => {}
+            Ast::Negative(value) => assert_subtree_is_prioritized(*value),
             Ast::Operator(op_kind, lhs, rhs) => {
                 assert!(
                     node_priority(&lhs) >= op_kind.priority(),
@@ -392,6 +592,7 @@ mod test_prioritization {
                 assert_subtree_is_prioritized(*lhs);
                 assert_subtree_is_prioritized(*rhs);
             }
+            Ast::Parenthesized(value) => assert_subtree_is_prioritized(*value),
         }
     }
 
@@ -400,11 +601,12 @@ mod test_prioritization {
             Ast::Number(_) => usize::MAX,
             Ast::Operator(op_type, _, _) => op_type.priority(),
             Ast::Negative(value) => node_priority(value),
+            Ast::Parenthesized(_) => usize::MAX,
         }
     }
 
     #[test]
-    fn should_support_prioritizing_with_negative_children() {
+    fn should_support_prioritizing_when_children_are_negative() {
         let naive_ast = add_node(neg_node(num_node("1")), neg_node(num_node("2")));
 
         assert_eq!(naive_ast, prioritize_operators(naive_ast.clone()));

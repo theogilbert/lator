@@ -84,7 +84,8 @@ mod tests {
     #[case("91×59×41×88×21+69+67×8", "406798997")]
     #[case("1+2×-3", "-5")]
     #[case("42×59×70-+-+14÷78-24÷25×-+79", "173536.0194871795")]
+    #[case("35+28+( -(-(+43.7++88×66+2-+-56)))", "5972.7")]
     fn test_should_evaluate_valid_expressions(#[case] expr: &str, #[case] result: &str) {
-        assert_eq!(evaluate(expr), Ok(result.to_string()));
+        assert_eq!(evaluate(expr), Ok(result.to_string()), "{expr}");
     }
 }

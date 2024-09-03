@@ -22,6 +22,9 @@ pub enum Ast {
     Operator(OperatorType, Box<Ast>, Box<Ast>),
     /// Applies the opposite function to value computed from the child AST.
     Negative(Box<Ast>),
+    /// Denotes a section of the AST which should always be evaluated first, regardless of operator
+    /// priority rules.
+    Parenthesized(Box<Ast>),
 }
 
 impl Ast {
@@ -31,6 +34,7 @@ impl Ast {
             Ast::Number(num) => num,
             Ast::Operator(op, lhs, rhs) => op.calculate(lhs.resolve(), rhs.resolve()),
             Ast::Negative(value) => -value.resolve(),
+            Ast::Parenthesized(value) => value.resolve(),
         }
     }
 }
@@ -41,6 +45,7 @@ impl Display for Ast {
             Ast::Number(value) => write!(f, "{}", value),
             Ast::Operator(op_type, lhs, rhs) => write!(f, "{}{}{}", lhs, op_type, rhs),
             Ast::Negative(value) => write!(f, "-{}", value),
+            Ast::Parenthesized(value) => write!(f, "({})", value),
         }
     }
 }
@@ -60,7 +65,7 @@ impl OperatorType {
 mod tests {
     use rstest::rstest;
 
-    use crate::engine::ast::test_helpers::{add_node, neg_node, num_node};
+    use crate::engine::ast::test_helpers::{add_node, neg_node, num_node, parenthesized_node};
 
     #[rstest]
     #[case("0")]
@@ -88,6 +93,12 @@ mod tests {
         let ast = neg_node(num_node("10"));
         assert_eq!(ast.resolve().to_string(), "-10")
     }
+
+    #[test]
+    fn should_return_original_value_when_prioritized() {
+        let ast = parenthesized_node(num_node("10"));
+        assert_eq!(ast.resolve().to_string(), "10")
+    }
 }
 
 /// This module provides helper functions to create ASTs with as little noise as possible.
@@ -113,11 +124,11 @@ pub mod test_helpers {
         Ast::Operator(OperatorType::Addition, Box::new(lhs), Box::new(rhs))
     }
 
-    pub fn sub_node(lhs: Ast, rhs: Ast) -> Ast {
-        Ast::Operator(OperatorType::Subtraction, Box::new(lhs), Box::new(rhs))
-    }
-
     pub fn neg_node(value: Ast) -> Ast {
         Ast::Negative(Box::new(value))
+    }
+
+    pub fn parenthesized_node(value: Ast) -> Ast {
+        Ast::Parenthesized(Box::new(value))
     }
 }

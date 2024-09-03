@@ -8,10 +8,6 @@ pub struct Number {
 }
 
 impl Number {
-    pub fn zero() -> Self {
-        Number { value: 0. }
-    }
-
     pub fn from_str(decimal_repr: &str) -> Result<Self, ()> {
         let value = decimal_repr.parse().map_err(|_| ())?;
         Ok(Number { value })

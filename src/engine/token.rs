@@ -15,6 +15,10 @@ pub enum TokenType {
     Number,
     /// Classifies a token as an operator sign.
     Operator(OperatorType),
+    /// Indicates the start of a prioritized sub-expression.
+    OpenParenthesis,
+    /// Indicates the end of a prioritized sub-expression.
+    CloseParenthesis,
 }
 
 #[derive(Eq, PartialEq, Debug, Copy, Clone)]
@@ -79,6 +83,8 @@ lazy_static! {
         (TokenType::Operator(OperatorType::Subtraction), "-"),
         (TokenType::Operator(OperatorType::Multiplication), "×"),
         (TokenType::Operator(OperatorType::Division), "÷"),
+        (TokenType::OpenParenthesis, r"\("),
+        (TokenType::CloseParenthesis, r"\)"),
     ])
     .into_iter()
     .map(|(token_type, re_expr)| (token_type, Regex::new(re_expr).unwrap()))
@@ -176,6 +182,13 @@ mod tests {
     }
 
     #[rstest]
+    #[case("(", TokenType::OpenParenthesis)]
+    #[case(")", TokenType::CloseParenthesis)]
+    fn should_evaluate_parenthesis_token(#[case] expr: &str, #[case] token_type: TokenType) {
+        assert_eq!(vec![str_to_token(expr, token_type)], tokenize(expr));
+    }
+
+    #[rstest]
     #[case("123abc", vec![num_token("123"), invalid_token("abc")])]
     #[case("abc123", vec![invalid_token("abc"), num_token("123")])]
     #[case("123+.456", vec![num_token("123"), add_token(), num_token(".456")])]
@@ -186,6 +199,7 @@ mod tests {
     #[test]
     fn should_extract_whitespace_tokens() {
         let expr = " 1   + \t\t\t   \x0a2 ";
+
         let expected_sequence = vec![
             whitespace_token(" "),
             num_token("1"),
@@ -195,6 +209,7 @@ mod tests {
             num_token("2"),
             whitespace_token(" "),
         ];
+
         assert_eq!(expected_sequence, tokenize(expr));
     }
 
@@ -233,5 +248,18 @@ pub mod test_helpers {
     pub fn mul_token() -> Token<'static> {
         let operator_type = OperatorType::Multiplication;
         Token::new(TokenType::Operator(operator_type), operator_type.as_str())
+    }
+
+    pub fn div_token() -> Token<'static> {
+        let operator_type = OperatorType::Division;
+        Token::new(TokenType::Operator(operator_type), operator_type.as_str())
+    }
+
+    pub fn open_par_token() -> Token<'static> {
+        Token::new(TokenType::OpenParenthesis, "(")
+    }
+
+    pub fn close_par_token() -> Token<'static> {
+        Token::new(TokenType::CloseParenthesis, ")")
     }
 }
