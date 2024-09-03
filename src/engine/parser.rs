@@ -534,7 +534,6 @@ mod test_prioritization {
 
     #[test]
     fn should_prioritize_negative_parenthesized_sub_tree() {
-        // A tree naively parsed as ((1+2)*3)+4 should be updated to 1+(2*3)+4
         let tree_to_prioritize = mul_node(
             add_node(num_node("1"), num_node("2")),
             add_node(num_node("3"), num_node("4")),
@@ -549,7 +548,6 @@ mod test_prioritization {
 
     #[test]
     fn should_not_swap_parenthesized_operator_with_parent() {
-        // A tree naively parsed as ((1+2)*3)+4 should be updated to 1+(2*3)+4
         let ast = mul_node(
             parenthesized_node(add_node(num_node("1"), num_node("2"))),
             num_node("5"),
