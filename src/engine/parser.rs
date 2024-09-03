@@ -241,7 +241,11 @@ fn find_position_of_unfinished_operator(tokens: &[Token]) -> usize {
 /// higher priority operators should end up deeper in the tree than lower priority operators.
 fn prioritize_operators(naive_tree: Ast) -> Ast {
     match naive_tree {
-        Ast::Number(_) | Ast::Negative(_) => naive_tree, // no further prioritization on these nodes
+        Ast::Number(_) => naive_tree, // no further prioritization on these nodes
+        Ast::Negative(value) => {
+            let prioritized_subtree = prioritize_operators(*value);
+            Ast::Negative(Box::new(prioritized_subtree))
+        }
         Ast::Operator(kind, lhs, rhs) => {
             let mut operator = Operator::new(kind, *lhs, *rhs);
 
@@ -526,6 +530,21 @@ mod test_prioritization {
     }
 
     #[test]
+    fn should_prioritize_negative_parenthesized_sub_tree() {
+        // A tree naively parsed as ((1+2)*3)+4 should be updated to 1+(2*3)+4
+        let tree_to_prioritize = mul_node(
+            add_node(num_node("1"), num_node("2")),
+            add_node(num_node("3"), num_node("4")),
+        );
+        let parent_tree = add_node(
+            num_node("4"),
+            parenthesized_node(neg_node(tree_to_prioritize)),
+        );
+
+        prioritize_and_check_tree(parent_tree);
+    }
+
+    #[test]
     fn should_not_swap_parenthesized_operator_with_parent() {
         // A tree naively parsed as ((1+2)*3)+4 should be updated to 1+(2*3)+4
         let ast = mul_node(
@@ -554,7 +573,8 @@ mod test_prioritization {
     /// their parents.
     fn assert_subtree_is_prioritized(ast: Ast) {
         match ast {
-            Ast::Number(_) | Ast::Negative(_) => {}
+            Ast::Number(_) => {}
+            Ast::Negative(value) => assert_subtree_is_prioritized(*value),
             Ast::Operator(op_kind, lhs, rhs) => {
                 assert!(
                     node_priority(&lhs) >= op_kind.priority(),
